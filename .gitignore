@@ -2,3 +2,10 @@
 .Rhistory
 .RData
 .Ruserdata
+.Rhistory
+.RData
+.Rproj.user
+.RDataTmp
+*.csv
+*.rds
+*.Rds
