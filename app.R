@@ -4,7 +4,13 @@ pacman::p_load(
   bs4Dash,
   DT,
   readr,
-  dplyr
+  dplyr,
+  tidyverse,
+  ggplot2,
+  plotly,
+  lubridate,
+  bslib,
+  scales
 )
 
 source("modules/eda_module.R")

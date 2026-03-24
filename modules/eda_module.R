@@ -2,148 +2,475 @@ eda_ui <- function(id) {
   ns <- NS(id)
   
   tagList(
-    fluidRow(
-      bs4Card(
-        title = "EDA Controls",
-        width = 4,
-        status = "primary",
-        solidHeader = FALSE,
-        
-        uiOutput(ns("var_select_ui")),
-        
-        sliderInput(
-          inputId = ns("bins"),
-          label = "Number of bins",
-          min = 5,
-          max = 50,
-          value = 20
+    tags$style(HTML("
+      .eda-title {
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 10px;
+      }
+      .eda-desc {
+        font-size: 16px;
+        line-height: 1.8;
+        margin-bottom: 18px;
+      }
+      .eda-side-card {
+        background: #ffffff;
+        border: 1px solid #d9d9d9;
+        border-radius: 14px;
+        padding: 16px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      }
+      .eda-summary-box {
+        background-color: #f3f4f6;
+        border-left: 5px solid #5DADE2;
+        padding: 16px;
+        border-radius: 10px;
+        margin-top: 18px;
+        font-size: 15px;
+        line-height: 1.7;
+      }
+      .nav-tabs .nav-link {
+        color: #5a5a5a;
+      }
+      .nav-tabs .nav-link.active {
+        font-weight: 600;
+        color: #000000;
+      }
+    ")),
+    
+    div(class = "eda-title", "Exploratory Data Analysis"),
+    
+    div(
+      class = "eda-desc",
+      "This is the first part of the R-Shiny application where users can perform Exploratory Data Analysis on two datasets. Users may select any variable and the application will automatically generate the appropriate visualisation."
+    ),
+    
+    tabsetPanel(
+      id = ns("eda_tabs"),
+      
+      tabPanel(
+        "Univariate",
+        br(),
+        fluidRow(
+          column(
+            width = 4,
+            div(
+              class = "eda-side-card",
+              radioButtons(
+                inputId = ns("dataset_choice"),
+                label = strong("Type of Dataset"),
+                choices = c(
+                  "Customer Data" = "customer",
+                  "Transactions Data" = "transactions"
+                ),
+                selected = "customer"
+              ),
+              uiOutput(ns("variable_ui")),
+              uiOutput(ns("log_scale_ui"))
+            )
+          ),
+          
+          column(
+            width = 8,
+            h2(strong("Univariate Analysis")),
+            plotlyOutput(ns("uni_plot"), height = "500px"),
+            div(class = "eda-summary-box", htmlOutput(ns("interpretation_text")))
+          )
         )
       ),
       
-      bs4ValueBoxOutput(ns("summary_box_1"), width = 4),
-      bs4ValueBoxOutput(ns("summary_box_2"), width = 4)
-    ),
-    
-    fluidRow(
-      bs4Card(
-        title = "Distribution Plot",
-        width = 6,
-        status = "primary",
-        solidHeader = FALSE,
-        plotOutput(ns("hist_plot"), height = "300px")
-      ),
-      
-      bs4Card(
-        title = "Scatter Plot",
-        width = 6,
-        status = "primary",
-        solidHeader = FALSE,
-        uiOutput(ns("scatter_x_ui")),
-        uiOutput(ns("scatter_y_ui")),
-        plotOutput(ns("scatter_plot"), height = "300px")
+      tabPanel(
+        "Bivariate",
+        br(),
+        fluidRow(
+          column(
+            width = 4,
+            div(
+              class = "eda-side-card",
+              uiOutput(ns("scatter_x_ui")),
+              uiOutput(ns("scatter_y_ui"))
+            )
+          ),
+          column(
+            width = 8,
+            h2(strong("Bivariate Analysis")),
+            plotlyOutput(ns("scatter_plot"), height = "500px")
+          )
+        )
       )
     )
   )
 }
 
-eda_server <- function(id, data) {
+eda_server <- function(id, data = NULL) {
   moduleServer(id, function(input, output, session) {
     
-    numeric_cols <- reactive({
-      req(data())
-      names(data())[sapply(data(), is.numeric)]
+    pretty_label <- function(x) {
+      x |>
+        gsub("_", " ", x = _) |>
+        tools::toTitleCase()
+    }
+    
+    detect_var_type <- function(x) {
+      if (inherits(x, "Date")) return("date")
+      if (is.numeric(x) || is.integer(x)) return("numeric")
+      if (is.factor(x) || is.character(x) || is.logical(x)) return("categorical")
+      return("other")
+    }
+    
+    is_skewed_numeric <- function(x) {
+      x <- x[is.finite(x)]
+      if (length(x) < 10) return(FALSE)
+      q1 <- quantile(x, 0.25, na.rm = TRUE)
+      q3 <- quantile(x, 0.75, na.rm = TRUE)
+      med <- median(x, na.rm = TRUE)
+      iqr_val <- q3 - q1
+      if (iqr_val == 0) return(FALSE)
+      max(x, na.rm = TRUE) > med + 3 * iqr_val
+    }
+    
+    read_csv_safe <- function(path_options) {
+      for (p in path_options) {
+        if (file.exists(p)) {
+          return(readr::read_csv(p, show_col_types = FALSE))
+        }
+      }
+      return(NULL)
+    }
+    
+    customer_data <- reactiveVal(NULL)
+    transactions_data <- reactiveVal(NULL)
+    
+    observe({
+      customer_df <- read_csv_safe(c(
+        "customer_data.csv",
+        "data/customer_data.csv",
+        "/mnt/data/customer_data.csv"
+      ))
+      
+      transactions_df <- read_csv_safe(c(
+        "transactions_data.csv",
+        "data/transactions_data.csv",
+        "/mnt/data/transactions_data.csv"
+      ))
+      
+      if (!is.null(customer_df)) {
+        date_cols <- c(
+          "first_tx", "last_tx", "last_survey_date",
+          "last_transaction_date", "first_transaction_date"
+        )
+        for (col in date_cols) {
+          if (col %in% names(customer_df)) {
+            customer_df[[col]] <- as.Date(customer_df[[col]])
+          }
+        }
+        
+        logical_like_cols <- c(
+          "savings_account", "credit_card", "personal_loan",
+          "investment_account", "insurance_product",
+          "bill_payment_user", "auto_savings_enabled"
+        )
+        for (col in logical_like_cols) {
+          if (col %in% names(customer_df)) {
+            customer_df[[col]] <- factor(
+              customer_df[[col]],
+              levels = c(FALSE, TRUE),
+              labels = c("No", "Yes")
+            )
+          }
+        }
+        
+        customer_data(customer_df)
+      }
+      
+      if (!is.null(transactions_df)) {
+        if ("date" %in% names(transactions_df)) {
+          transactions_df$date <- as.Date(transactions_df$date)
+        }
+        transactions_data(transactions_df)
+      }
     })
     
-    output$var_select_ui <- renderUI({
-      req(data())
-      req(length(numeric_cols()) > 0)
+    current_data <- reactive({
+      if (input$dataset_choice == "customer") {
+        req(customer_data())
+        customer_data()
+      } else {
+        req(transactions_data())
+        transactions_data()
+      }
+    })
+    
+    numeric_cols <- reactive({
+      req(current_data())
+      names(current_data())[sapply(current_data(), is.numeric)]
+    })
+    
+    output$variable_ui <- renderUI({
+      df <- current_data()
       
       selectInput(
-        inputId = session$ns("var"),
-        label = "Select Numeric Variable",
-        choices = numeric_cols(),
-        selected = numeric_cols()[1]
+        inputId = session$ns("selected_var"),
+        label = strong("Variables"),
+        choices = setNames(names(df), pretty_label(names(df))),
+        selected = names(df)[1]
       )
     })
     
+    output$log_scale_ui <- renderUI({
+      req(input$selected_var)
+      df <- current_data()
+      x <- df[[input$selected_var]]
+      
+      if (detect_var_type(x) == "numeric" && is_skewed_numeric(x)) {
+        checkboxInput(
+          inputId = session$ns("use_log_scale"),
+          label = "Use log scale for skewed data",
+          value = FALSE
+        )
+      }
+    })
+    
+    output$uni_plot <- renderPlotly({
+      req(input$selected_var)
+      
+      df <- current_data()
+      var_name <- input$selected_var
+      x <- df[[var_name]]
+      var_type <- detect_var_type(x)
+      label <- pretty_label(var_name)
+      use_log <- isTRUE(input$use_log_scale)
+      
+      if (var_type == "numeric") {
+        plot_df <- df |>
+          dplyr::filter(!is.na(.data[[var_name]]))
+        
+        if (use_log) {
+          plot_df <- plot_df |>
+            dplyr::filter(.data[[var_name]] > 0)
+          
+          p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = .data[[var_name]])) +
+            ggplot2::geom_histogram(
+              bins = 30,
+              fill = "#5DADE2",
+              color = "white",
+              alpha = 0.9
+            ) +
+            ggplot2::scale_x_log10(labels = scales::comma) +
+            ggplot2::labs(
+              title = paste("Distribution of", label),
+              x = paste(label, "(log scale)"),
+              y = "Count"
+            ) +
+            ggplot2::theme_minimal(base_size = 13) +
+            ggplot2::theme(
+              plot.title = ggplot2::element_text(face = "bold", size = 16),
+              panel.grid.minor = ggplot2::element_blank()
+            )
+        } else {
+          p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = .data[[var_name]])) +
+            ggplot2::geom_histogram(
+              bins = 30,
+              fill = "#5DADE2",
+              color = "white",
+              alpha = 0.9
+            ) +
+            ggplot2::labs(
+              title = paste("Distribution of", label),
+              x = label,
+              y = "Count"
+            ) +
+            ggplot2::theme_minimal(base_size = 13) +
+            ggplot2::theme(
+              plot.title = ggplot2::element_text(face = "bold", size = 16),
+              panel.grid.minor = ggplot2::element_blank()
+            ) +
+            ggplot2::scale_x_continuous(labels = scales::comma)
+        }
+        
+        plotly::ggplotly(p)
+        
+      } else if (var_type == "categorical") {
+        plot_df <- df |>
+          dplyr::mutate(temp_var = as.character(.data[[var_name]])) |>
+          dplyr::mutate(temp_var = ifelse(is.na(temp_var), "Missing", temp_var)) |>
+          dplyr::count(temp_var, name = "count") |>
+          dplyr::arrange(desc(count))
+        
+        p <- ggplot2::ggplot(
+          plot_df,
+          ggplot2::aes(x = reorder(temp_var, count), y = count, fill = temp_var)
+        ) +
+          ggplot2::geom_col(show.legend = FALSE, alpha = 0.95) +
+          ggplot2::coord_flip() +
+          ggplot2::labs(
+            title = paste("Frequency of", label),
+            x = label,
+            y = "Count"
+          ) +
+          ggplot2::theme_minimal(base_size = 13) +
+          ggplot2::theme(
+            plot.title = ggplot2::element_text(face = "bold", size = 16),
+            panel.grid.minor = ggplot2::element_blank()
+          ) +
+          ggplot2::scale_y_continuous(labels = scales::comma)
+        
+        plotly::ggplotly(p)
+        
+      } else if (var_type == "date") {
+        plot_df <- df |>
+          dplyr::filter(!is.na(.data[[var_name]])) |>
+          dplyr::count(.data[[var_name]], name = "count")
+        
+        p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = .data[[var_name]], y = count)) +
+          ggplot2::geom_line(linewidth = 1) +
+          ggplot2::geom_point(size = 2) +
+          ggplot2::labs(
+            title = paste("Date Distribution of", label),
+            x = label,
+            y = "Count"
+          ) +
+          ggplot2::theme_minimal(base_size = 13) +
+          ggplot2::theme(
+            plot.title = ggplot2::element_text(face = "bold", size = 16),
+            panel.grid.minor = ggplot2::element_blank()
+          ) +
+          ggplot2::scale_y_continuous(labels = scales::comma)
+        
+        plotly::ggplotly(p)
+        
+      } else {
+        p <- ggplot2::ggplot() +
+          ggplot2::annotate("text", x = 1, y = 1, label = "Unsupported variable type", size = 6) +
+          ggplot2::theme_void()
+        
+        plotly::ggplotly(p)
+      }
+    })
+    
+    output$interpretation_text <- renderUI({
+      req(input$selected_var)
+      
+      df <- current_data()
+      var_name <- input$selected_var
+      x <- df[[var_name]]
+      var_type <- detect_var_type(x)
+      label <- pretty_label(var_name)
+      use_log <- isTRUE(input$use_log_scale)
+      
+      if (var_type == "numeric") {
+        miss <- sum(is.na(x))
+        med <- round(stats::median(x, na.rm = TRUE), 2)
+        mean_val <- round(mean(x, na.rm = TRUE), 2)
+        min_val <- round(min(x, na.rm = TRUE), 2)
+        max_val <- round(max(x, na.rm = TRUE), 2)
+        skew_flag <- is_skewed_numeric(x)
+        
+        txt <- paste0(
+          "<b>", label, "</b> is a numeric variable. ",
+          "The values range from ", scales::comma(min_val), " to ", scales::comma(max_val),
+          ", with a median of ", scales::comma(med),
+          " and mean of ", scales::comma(mean_val), ". "
+        )
+        
+        if (skew_flag) {
+          txt <- paste0(txt, "The distribution appears right-skewed, meaning a small number of large values may stretch the scale. ")
+        } else {
+          txt <- paste0(txt, "The distribution appears relatively balanced without extreme stretching. ")
+        }
+        
+        if (use_log) {
+          txt <- paste0(txt, "A log scale is applied to improve readability for large-value differences. ")
+        }
+        
+        txt <- paste0(txt, "Missing values: ", miss, ".")
+        return(HTML(txt))
+      }
+      
+      if (var_type == "categorical") {
+        top_cat <- df |>
+          dplyr::mutate(temp_var = as.character(.data[[var_name]])) |>
+          dplyr::mutate(temp_var = ifelse(is.na(temp_var), "Missing", temp_var)) |>
+          dplyr::count(temp_var, sort = TRUE, name = "count") |>
+          dplyr::slice(1)
+        
+        n_cat <- dplyr::n_distinct(x, na.rm = TRUE)
+        miss <- sum(is.na(x))
+        
+        return(HTML(paste0(
+          "<b>", label, "</b> is a categorical variable with ",
+          n_cat, " distinct categories. ",
+          "The most common category is '<b>", top_cat$temp_var,
+          "</b>' with ", scales::comma(top_cat$count),
+          " observations. Missing values: ", miss, "."
+        )))
+      }
+      
+      if (var_type == "date") {
+        earliest <- min(x, na.rm = TRUE)
+        latest <- max(x, na.rm = TRUE)
+        miss <- sum(is.na(x))
+        
+        return(HTML(paste0(
+          "<b>", label, "</b> is a date variable spanning from ",
+          earliest, " to ", latest,
+          ". The plot shows how observations are distributed across time. ",
+          "Missing values: ", miss, "."
+        )))
+      }
+      
+      HTML("Interpretation is not available for this variable.")
+    })
+    
     output$scatter_x_ui <- renderUI({
-      req(data())
-      req(length(numeric_cols()) > 0)
+      req(numeric_cols())
       
       selectInput(
         inputId = session$ns("x_var"),
-        label = "Scatter X Variable",
-        choices = numeric_cols(),
+        label = strong("X Variable"),
+        choices = setNames(numeric_cols(), pretty_label(numeric_cols())),
         selected = numeric_cols()[1]
       )
     })
     
     output$scatter_y_ui <- renderUI({
-      req(data())
-      req(length(numeric_cols()) > 1)
+      req(numeric_cols())
+      req(length(numeric_cols()) >= 2)
       
       selectInput(
         inputId = session$ns("y_var"),
-        label = "Scatter Y Variable",
-        choices = numeric_cols(),
+        label = strong("Y Variable"),
+        choices = setNames(numeric_cols(), pretty_label(numeric_cols())),
         selected = numeric_cols()[2]
       )
     })
     
-    output$summary_box_1 <- renderbs4ValueBox({
-      req(data())
-      bs4ValueBox(
-        value = nrow(data()),
-        subtitle = "Rows",
-        status = "primary",
-        icon = icon("table")
-      )
-    })
-    
-    output$summary_box_2 <- renderbs4ValueBox({
-      req(data())
-      bs4ValueBox(
-        value = ncol(data()),
-        subtitle = "Columns",
-        status = "info",
-        icon = icon("columns")
-      )
-    })
-    
-    output$hist_plot <- renderPlot({
-      req(data())
-      req(input$var)
-      
-      hist(
-        data()[[input$var]],
-        breaks = input$bins,
-        main = paste("Distribution of", input$var),
-        xlab = input$var,
-        col = "lightblue",
-        border = "white"
-      )
-    })
-    
-    output$scatter_plot <- renderPlot({
-      req(data())
+    output$scatter_plot <- renderPlotly({
       req(input$x_var, input$y_var)
       
-      plot(
-        x = data()[[input$x_var]],
-        y = data()[[input$y_var]],
-        main = paste(input$y_var, "vs", input$x_var),
-        xlab = input$x_var,
-        ylab = input$y_var,
-        pch = 19,
-        col = "steelblue"
-      )
+      df <- current_data()
       
-      abline(
-        lm(data()[[input$y_var]] ~ data()[[input$x_var]]),
-        col = "red",
-        lty = 2
-      )
+      plot_df <- df |>
+        dplyr::filter(!is.na(.data[[input$x_var]]), !is.na(.data[[input$y_var]]))
+      
+      p <- ggplot2::ggplot(
+        plot_df,
+        ggplot2::aes(x = .data[[input$x_var]], y = .data[[input$y_var]])
+      ) +
+        ggplot2::geom_point(color = "#2E86C1", alpha = 0.7, size = 2.5) +
+        ggplot2::geom_smooth(method = "lm", se = FALSE, linetype = "dashed", color = "#E74C3C") +
+        ggplot2::labs(
+          title = paste(pretty_label(input$y_var), "vs", pretty_label(input$x_var)),
+          x = pretty_label(input$x_var),
+          y = pretty_label(input$y_var)
+        ) +
+        ggplot2::theme_minimal(base_size = 13) +
+        ggplot2::theme(
+          plot.title = ggplot2::element_text(face = "bold", size = 16),
+          panel.grid.minor = ggplot2::element_blank()
+        )
+      
+      plotly::ggplotly(p)
     })
-    
   })
 }
