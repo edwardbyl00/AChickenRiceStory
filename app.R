@@ -1,3 +1,6 @@
+# Increase load filesize
+options(shiny.maxRequestSize = 100*1024^2)
+
 # Load package
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(shiny,bs4Dash,DT,readr,dplyr,tidyverse,ggplot2,
@@ -81,6 +84,16 @@ ui <- dashboardPage(
             selectInput("sep", "Separator", choices = c(Comma = ",", Semicolon = ";", Tab = "\t"), selected = ","),
             
             br(),
+            
+            selectInput(
+              inputId = "saved_file",
+              label = "Or select a saved dataset",
+              choices = NULL
+            ),
+            
+            actionButton("load_saved", "Load Selected Dataset", class = "btn-primary"),
+            
+            br(),
             verbatimTextOutput("file_status")
           ),
           
@@ -134,25 +147,73 @@ ui <- dashboardPage(
 ##### Server
 server <- function(input, output, session) {
   
-  uploaded_data <- reactive({
+  # create upload storage
+  dir.create("data/uploads", showWarnings = FALSE, recursive = TRUE)
+  
+  # reactive dataset
+  active_data <- reactiveVal(NULL)
+  
+  # save uploaded file
+  observeEvent(input$file_upload, {
     req(input$file_upload)
     
-    read.csv(
+    saved_name <- paste0(
+      tools::file_path_sans_ext(input$file_upload$name),
+      "_",
+      format(Sys.time(), "%Y%m%d_%H%M%S"),
+      ".csv"
+    )
+    
+    file.copy(
+      from = input$file_upload$datapath,
+      to = file.path("data/uploads", saved_name),
+      overwrite = TRUE
+    )
+  })
+  
+  # update dropdown list (SEPARATE observer)
+  observe({
+    files <- list.files("data/uploads", pattern = "\\.csv$")
+    updateSelectInput(session, "saved_file", choices = files)
+  })
+  
+  # load uploaded file into active_data
+  observeEvent(input$file_upload, {
+    req(input$file_upload)
+    
+    df <- read.csv(
       file = input$file_upload$datapath,
       header = input$header,
       sep = input$sep
     )
+    
+    active_data(df)
   })
   
+  # load selected saved file (SEPARATE observer)
+  observeEvent(input$load_saved, {
+    req(input$saved_file)
+    
+    file_path <- file.path("data/uploads", input$saved_file)
+    df <- read.csv(file_path)
+    
+    active_data(df)
+  })
+  
+  # file status
   output$file_status <- renderText({
-    req(input$file_upload)
-    paste("Uploaded file:", input$file_upload$name)
+    if (!is.null(input$file_upload)) {
+      paste("Uploaded file:", input$file_upload$name)
+    } else if (!is.null(input$saved_file)) {
+      paste("Loaded saved file:", input$saved_file)
+    }
   })
   
+  # VALUE BOXES (FIXED)
   output$n_rows <- renderbs4ValueBox({
-    req(uploaded_data())
+    req(active_data())
     bs4ValueBox(
-      value = nrow(uploaded_data()),
+      value = nrow(active_data()),
       subtitle = "Rows",
       color = "teal",
       icon = icon("table")
@@ -160,9 +221,9 @@ server <- function(input, output, session) {
   })
   
   output$n_cols <- renderbs4ValueBox({
-    req(uploaded_data())
+    req(active_data())
     bs4ValueBox(
-      value = ncol(uploaded_data()),
+      value = ncol(active_data()),
       subtitle = "Columns",
       color = "teal",
       icon = icon("columns")
@@ -170,26 +231,33 @@ server <- function(input, output, session) {
   })
   
   output$file_name_box <- renderbs4ValueBox({
-    req(input$file_upload)
+    if (!is.null(input$file_upload)) {
+      file_name <- input$file_upload$name
+    } else {
+      file_name <- input$saved_file
+    }
+    
     bs4ValueBox(
-      value = input$file_upload$name,
+      value = file_name,
       subtitle = "File Name",
       color = "teal",
       icon = icon("file-csv")
     )
   })
   
+  # DATA PREVIEW (FIXED)
   output$data_preview <- renderDT({
-    req(uploaded_data())
+    req(active_data())
     datatable(
-      head(uploaded_data(), 20),
+      head(active_data(), 20),
       options = list(scrollX = TRUE, pageLength = 10)
     )
   })
   
-  eda_server("eda_1", data = uploaded_data)
-  clustering_server("cluster_1", data = uploaded_data)
-  model_server("model_1", data = uploaded_data)
+  # MODULES (FIXED)
+  eda_server("eda_1", data = active_data)
+  clustering_server("cluster_1", data = active_data)
+  model_server("model_1", data = active_data)
 }
 
 shinyApp(ui, server)
