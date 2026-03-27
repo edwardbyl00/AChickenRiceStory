@@ -2,133 +2,140 @@ clustering_ui <- function(id) {
   ns <- NS(id)
   
   tagList(
-    fluidRow(
-      bs4Card(
-        title = "Clustering Controls",
-        width = 4,
-        status = "primary",
-        solidHeader = FALSE,
-        
-        sliderInput(
-          inputId = ns("k"),
-          label = "Number of clusters",
-          min = 2,
-          max = 10,
-          value = 3
-        ),
-        
-        uiOutput(ns("cluster_vars_ui"))
+    tabsetPanel(
+      id = ns("cluster_tabs"),
+      
+      tabPanel(
+        "Feature Selection",
+        fluidRow(
+          column(
+            width = 3,
+            bs4Card(
+              title = "Select Features",
+              width = 12,
+              status = "teal",
+              solidHeader = FALSE,
+              uiOutput(ns("feature_select_ui")),
+              br(),
+              actionButton(ns("update_features"), "Update Features", class = "btn-primary")
+            )
+          ),
+          
+          column(
+            width = 7,
+            bs4Card(
+              title = "Correlation Matrix of Selected Clustering Features",
+              width = 12,
+              status = "teal",
+              solidHeader = FALSE,
+              plotOutput(ns("corr_plot"), height = "500px")
+            )
+          ),
+          
+          column(
+            width = 2,
+            bs4Card(
+              title = "Guide",
+              width = 12,
+              status = "teal",
+              solidHeader = FALSE,
+              p("Select at least 2 numeric variables."),
+              p("Use Update Features to refresh the correlation matrix."),
+              p("Then move to Cluster Analysis.")
+            )
+          )
+        )
       ),
       
-      bs4ValueBoxOutput(ns("cluster_box_1"), width = 4),
-      bs4ValueBoxOutput(ns("cluster_box_2"), width = 4)
-    ),
-    
-    fluidRow(
-      bs4Card(
-        title = "Cluster Plot",
-        width = 6,
-        status = "primary",
-        solidHeader = FALSE,
-        plotOutput(ns("cluster_plot"), height = "300px")
-      ),
-      
-      bs4Card(
-        title = "Cluster Size Summary",
-        width = 6,
-        status = "primary",
-        solidHeader = FALSE,
-        tableOutput(ns("cluster_table"))
+      tabPanel(
+        "Cluster Analysis",
+        fluidRow(
+          column(
+            width = 3,
+            bs4Card(
+              title = "Clustering Controls",
+              width = 12,
+              status = "primary",
+              solidHeader = FALSE,
+              
+              sliderInput(
+                ns("k"),
+                "Number of Clusters",
+                min = 2,
+                max = 10,
+                value = 4,
+                step = 1
+              ),
+              
+              actionButton(ns("run_cluster"), "Run Clustering", class = "btn-primary"),
+              br(), br(),
+              downloadButton(ns("export_clusters"), "Export Cluster Groupings")
+            )
+          ),
+          
+          column(
+            width = 9,
+            fluidRow(
+              column(
+                width = 6,
+                bs4Card(
+                  title = "Parallel Plot by Cluster Mean",
+                  width = 12,
+                  status = "primary",
+                  solidHeader = FALSE,
+                  plotOutput(ns("parallel_plot"), height = "300px")
+                )
+              ),
+              column(
+                width = 6,
+                bs4Card(
+                  title = "Customer Cluster Visualisation",
+                  width = 12,
+                  status = "primary",
+                  solidHeader = FALSE,
+                  plotOutput(ns("pca_plot"), height = "300px")
+                )
+              )
+            ),
+            
+            fluidRow(
+              column(
+                width = 6,
+                bs4Card(
+                  title = "Number of Customers by Cluster",
+                  width = 12,
+                  status = "primary",
+                  solidHeader = FALSE,
+                  plotOutput(ns("cluster_size_plot"), height = "300px")
+                )
+              ),
+              column(
+                width = 6,
+                bs4Card(
+                  title = "Cluster Feature Heatmap",
+                  width = 12,
+                  status = "primary",
+                  solidHeader = FALSE,
+                  plotOutput(ns("heatmap_plot"), height = "300px")
+                )
+              )
+            ),
+            
+            fluidRow(
+              column(
+                width = 12,
+                bs4Card(
+                  title = "Elbow Plot",
+                  width = 12,
+                  status = "primary",
+                  solidHeader = FALSE,
+                  plotOutput(ns("elbow_plot"), height = "280px")
+                )
+              )
+            )
+          )
+        )
       )
     )
   )
-}
-
-clustering_server <- function(id, data) {
-  moduleServer(id, function(input, output, session) {
-    
-    numeric_cols <- reactive({
-      req(data())
-      names(data())[sapply(data(), is.numeric)]
-    })
-    
-    output$cluster_vars_ui <- renderUI({
-      req(data())
-      req(length(numeric_cols()) >= 2)
-      
-      selectInput(
-        inputId = session$ns("cluster_vars"),
-        label = "Select Numeric Variables",
-        choices = numeric_cols(),
-        selected = numeric_cols()[1:min(2, length(numeric_cols()))],
-        multiple = TRUE
-      )
-    })
-    
-    cluster_data <- reactive({
-      req(data())
-      req(input$cluster_vars)
-      req(length(input$cluster_vars) >= 2)
-      
-      df <- data()[, input$cluster_vars, drop = FALSE]
-      df <- na.omit(df)
-      scale(df)
-    })
-    
-    cluster_result <- reactive({
-      req(cluster_data())
-      kmeans(cluster_data(), centers = input$k)
-    })
-    
-    output$cluster_box_1 <- renderbs4ValueBox({
-      bs4ValueBox(
-        value = input$k,
-        subtitle = "Selected K",
-        status = "primary",
-        icon = icon("object-group")
-      )
-    })
-    
-    output$cluster_box_2 <- renderbs4ValueBox({
-      req(cluster_data())
-      bs4ValueBox(
-        value = nrow(cluster_data()),
-        subtitle = "Rows Used",
-        status = "info",
-        icon = icon("database")
-      )
-    })
-    
-    output$cluster_plot <- renderPlot({
-      req(cluster_data())
-      req(cluster_result())
-      
-      plot_data <- as.data.frame(cluster_data())
-      
-      plot(
-        x = plot_data[[1]],
-        y = plot_data[[2]],
-        col = cluster_result()$cluster,
-        pch = 19,
-        main = paste("Cluster Plot with K =", input$k),
-        xlab = names(plot_data)[1],
-        ylab = names(plot_data)[2]
-      )
-      
-      points(
-        cluster_result()$centers[, 1],
-        cluster_result()$centers[, 2],
-        pch = 8,
-        cex = 2,
-        lwd = 2,
-        col = 1:input$k
-      )
-    })
-    
-    output$cluster_table <- renderTable({
-      req(cluster_result())
-      as.data.frame(table(cluster_result()$cluster))
-    })
-    
-  })
 }

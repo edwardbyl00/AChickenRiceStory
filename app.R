@@ -1,30 +1,22 @@
+# Load package
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load(
-  shiny,
-  bs4Dash,
-  DT,
-  readr,
-  dplyr,
-  tidyverse,
-  ggplot2,
-  plotly,
-  lubridate,
-  bslib,
-  scales
-)
+pacman::p_load(shiny,bs4Dash,DT,readr,dplyr,tidyverse,ggplot2,
+               plotly,lubridate,bslib,scales)
 
+# set up modules
 source("modules/eda_module.R")
 source("modules/clustering_module.R")
 source("modules/model_module.R")
 
+
 ui <- dashboardPage(
   dark = FALSE,
-  fullscreen = TRUE,
+  fullscreen = FALSE,
   
   header = dashboardHeader(
     title = dashboardBrand(
       title = "A Chicken Rice Story",
-      color = "primary"
+      color = "teal"
     ),
     skin = "light"
   ),
@@ -34,6 +26,7 @@ ui <- dashboardPage(
     status = "primary",
     elevation = 3,
     
+#     Left Sidebar
     sidebarMenu(
       id = "tabs",
       menuItem("Dataset Overview", tabName = "overview", icon = icon("database")),
@@ -46,6 +39,7 @@ ui <- dashboardPage(
   
   body = dashboardBody(
     tags$head(
+#       add softer cards and rounder
       tags$style(HTML("
         .content-wrapper {
           background-color: #f4f6fb !important;
@@ -74,7 +68,7 @@ ui <- dashboardPage(
           bs4Card(
             title = "Upload Dataset",
             width = 4,
-            status = "primary",
+            status = "teal",
             solidHeader = FALSE,
             
             fileInput(
@@ -99,7 +93,7 @@ ui <- dashboardPage(
           bs4Card(
             title = "Dataset Preview",
             width = 12,
-            status = "primary",
+            status = "teal",
             solidHeader = FALSE,
             DTOutput("data_preview")
           )
@@ -127,7 +121,7 @@ ui <- dashboardPage(
           bs4Card(
             title = "Model Comparison",
             width = 12,
-            status = "primary",
+            status = "teal",
             solidHeader = FALSE,
             p("This section can be added later.")
           )
@@ -137,6 +131,7 @@ ui <- dashboardPage(
   )
 )
 
+##### Server
 server <- function(input, output, session) {
   
   uploaded_data <- reactive({
@@ -159,7 +154,7 @@ server <- function(input, output, session) {
     bs4ValueBox(
       value = nrow(uploaded_data()),
       subtitle = "Rows",
-      status = "primary",
+      color = "teal",
       icon = icon("table")
     )
   })
@@ -169,7 +164,7 @@ server <- function(input, output, session) {
     bs4ValueBox(
       value = ncol(uploaded_data()),
       subtitle = "Columns",
-      status = "info",
+      color = "teal",
       icon = icon("columns")
     )
   })
@@ -179,7 +174,7 @@ server <- function(input, output, session) {
     bs4ValueBox(
       value = input$file_upload$name,
       subtitle = "File Name",
-      status = "success",
+      color = "teal",
       icon = icon("file-csv")
     )
   })
