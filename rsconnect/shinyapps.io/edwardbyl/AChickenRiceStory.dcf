@@ -5,13 +5,6 @@ account: edwardbyl
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 16944907
-<<<<<<< HEAD
-bundleId: 11770716
-=======
-bundleId:
->>>>>>> 6891dd8d5572c46dd5555d04595eeb941d38607a
+bundleId: 11770773
 url: https://edwardbyl.shinyapps.io/AChickenRiceStory/
 version: 1
-asMultiple: FALSE
-asStatic: FALSE
-ignoredFiles: data/customer_data.csv

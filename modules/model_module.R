@@ -6,7 +6,7 @@ model_ui <- function(id) {
       bs4Card(
         title = "Select Regression Model",
         width = 4,
-        status = "primary",
+        status = "teal",
         solidHeader = FALSE,
         
         selectInput(
@@ -40,7 +40,7 @@ model_ui <- function(id) {
           bs4Card(
             title = "Evaluation Metrics",
             width = 7,
-            status = "primary",
+            status = "teal",
             solidHeader = FALSE,
             DT::DTOutput(ns("metrics_table"))
           ),
@@ -48,7 +48,7 @@ model_ui <- function(id) {
           bs4Card(
             title = "Feature Importance",
             width = 5,
-            status = "primary",
+            status = "teal",
             solidHeader = FALSE,
             plotOutput(ns("feature_plot_top"), height = "250px")
           )
@@ -68,7 +68,7 @@ model_ui <- function(id) {
       bs4Card(
         title = "Actual vs Predicted",
         width = 4,
-        status = "primary",
+        status = "teal",
         solidHeader = FALSE,
         plotOutput(ns("scatter_plot"), height = "300px")
       ),
@@ -76,7 +76,7 @@ model_ui <- function(id) {
       bs4Card(
         title = "Model Summary",
         width = 4,
-        status = "primary",
+        status = "teal",
         solidHeader = FALSE,
         verbatimTextOutput(ns("model_summary"))
       )
