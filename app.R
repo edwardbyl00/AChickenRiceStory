@@ -3,13 +3,15 @@ options(shiny.maxRequestSize = 100*1024^2)
 
 # Load package
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load(shiny,bs4Dash,DT,readr,dplyr,tidyverse,ggplot2,
-               plotly,lubridate,bslib,scales)
+pacman::p_load(shiny, bs4Dash, DT, readr, dplyr, tidyverse, ggplot2,
+               plotly, lubridate, bslib, scales,
+               rpart, xgboost, randomForest)
 
 # set up modules
 source("modules/eda_module.R")
 source("modules/clustering_module.R")
-source("modules/model_module.R")
+source("modules/Prediction_model_module.R")
+source("modules/model_comparison.R")
 
 
 ui <- dashboardPage(
@@ -29,7 +31,7 @@ ui <- dashboardPage(
     status = "primary",
     elevation = 3,
     
-#     Left Sidebar
+    #     Left Sidebar
     sidebarMenu(
       id = "tabs",
       menuItem("Dataset Overview", tabName = "overview", icon = icon("database")),
@@ -42,7 +44,7 @@ ui <- dashboardPage(
   
   body = dashboardBody(
     tags$head(
-#       add softer cards and rounder
+      #       add softer cards and rounder
       tags$style(HTML("
         .content-wrapper {
           background-color: #f4f6fb !important;
@@ -130,15 +132,7 @@ ui <- dashboardPage(
       
       tabItem(
         tabName = "comparison",
-        fluidRow(
-          bs4Card(
-            title = "Model Comparison",
-            width = 12,
-            status = "teal",
-            solidHeader = FALSE,
-            p("This section can be added later.")
-          )
-        )
+        comparison_ui("comparison_1")
       )
     )
   )
@@ -152,6 +146,8 @@ server <- function(input, output, session) {
   
   # reactive dataset
   active_data <- reactiveVal(NULL)
+  # save models result
+  saved_models <- reactiveValues(results = list())
   
   # save uploaded file
   observeEvent(input$file_upload, {
@@ -257,7 +253,8 @@ server <- function(input, output, session) {
   # MODULES (FIXED)
   eda_server("eda_1", data = active_data)
   clustering_server("cluster_1", data = active_data)
-  model_server("model_1", data = active_data)
+  model_server("model_1", data = active_data, saved_models = saved_models)
+  comparison_server("comparison_1", data = active_data, saved_models = saved_models)
 }
 
 shinyApp(ui, server)

@@ -1,8 +1,7 @@
 pacman::p_load(
-  shiny, bs4Dash, DT, readr, dplyr, tidyverse, ggplot2,
-  plotly, lubridate, bslib, scales,
-  caret, rpart, ranger, recipes, parsnip, workflows, xgboost, randomForest
+  shiny, bs4Dash, DT, dplyr, rpart, xgboost, randomForest
 )
+
 model_ui <- function(id) {
   ns <- NS(id)
   
@@ -17,7 +16,7 @@ model_ui <- function(id) {
         selectInput(
           inputId = ns("model_type"),
           label = "Select Model",
-          choices = c("Linear Regression","Regression Tree", "Random Forest", "XGBoost")
+          choices = c("Linear Regression", "Regression Tree", "Random Forest", "XGBoost")
         ),
         
         uiOutput(ns("target_ui")),
@@ -39,14 +38,16 @@ model_ui <- function(id) {
         
         conditionalPanel(
           condition = sprintf("input['%s'] == 'XGBoost'", ns("model_type")),
-          sliderInput(ns("xgb_trees"), "Number of Trees", min = 100, max = 1000, value = 500, step = 50),
+          sliderInput(ns("xgb_trees"), "Number of Boosting Rounds", min = 100, max = 1000, value = 500, step = 50),
           sliderInput(ns("xgb_depth"), "Tree Depth", min = 2, max = 10, value = 6),
           sliderInput(ns("xgb_lr"), "Learning Rate", min = 0.01, max = 0.3, value = 0.05, step = 0.01),
           sliderInput(ns("xgb_min_n"), "Minimum Node Size", min = 1, max = 20, value = 5),
           sliderInput(ns("xgb_sample"), "Sample Size", min = 0.5, max = 1, value = 0.8, step = 0.1)
         ),
         
-        actionButton(ns("run_model"), "Run Experiment", class = "btn-primary")
+        actionButton(ns("run_model"), "Run Experiment", class = "btn-primary"),
+        br(), br(),
+        actionButton(ns("save_model"), "Save Current Model", class = "btn-success")
       ),
       
       column(
@@ -64,7 +65,7 @@ model_ui <- function(id) {
             width = 7,
             status = "teal",
             solidHeader = FALSE,
-            DT::DTOutput(ns("metrics_table"))
+            DTOutput(ns("metrics_table"))
           ),
           
           bs4Card(
@@ -106,12 +107,13 @@ model_ui <- function(id) {
   )
 }
 
-model_server <- function(id, data) {
+model_server <- function(id, data, saved_models) {
   moduleServer(id, function(input, output, session) {
     
     numeric_cols <- reactive({
       req(data())
-      names(data())[sapply(data(), is.numeric)]
+      cols <- names(data())[sapply(data(), is.numeric)]
+      cols[!grepl("(^id$|_id$)", cols, ignore.case = TRUE)]
     })
     
     output$target_ui <- renderUI({
@@ -127,17 +129,23 @@ model_server <- function(id, data) {
     })
     
     output$predictors_ui <- renderUI({
-      req(data())
+      req(data(), input$target)
       req(length(numeric_cols()) >= 2)
       
-      default_predictors <- numeric_cols()[numeric_cols() != numeric_cols()[1]]
+      predictor_choices <- setdiff(numeric_cols(), input$target)
       
-      selectInput(
+      selectizeInput(
         inputId = session$ns("predictors"),
         label = "Select Predictor Variables",
-        choices = numeric_cols(),
-        selected = default_predictors,
-        multiple = TRUE
+        choices = predictor_choices,
+        selected = NULL,
+        multiple = TRUE,
+        options = list(
+          placeholder = "Select predictor variables",
+          plugins = list("remove_button"),
+          maxItems = NULL,
+          closeAfterSelect = FALSE
+        )
       )
     })
     
@@ -160,26 +168,136 @@ model_server <- function(id, data) {
       formula_text <- paste(input$target, "~", paste(predictors, collapse = " + "))
       model_formula <- as.formula(formula_text)
       
+      # Train-test split
+      set.seed(123)
+      df <- model_data()
+      train_idx <- sample(seq_len(nrow(df)), size = floor(0.8 * nrow(df)))
+      
+      train_data <- df[train_idx, , drop = FALSE]
+      test_data  <- df[-train_idx, , drop = FALSE]
+      
+      validate(
+        need(nrow(test_data) > 1, "Test set is too small for evaluation.")
+      )
+      
+      model <- NULL
+      preds <- NULL
+      importance_df <- data.frame(
+        feature = character(0),
+        importance = numeric(0)
+      )
+      
       if (input$model_type == "Linear Regression") {
-        model <- lm(model_formula, data = model_data())
-      } else {
-        if (!requireNamespace("randomForest", quietly = TRUE)) {
-          stop("Please install the randomForest package.")
+        
+        model <- lm(model_formula, data = train_data)
+        preds <- predict(model, newdata = test_data)
+        
+        coefs <- coef(model)
+        coefs <- coefs[names(coefs) != "(Intercept)"]
+        
+        if (length(coefs) > 0) {
+          importance_df <- data.frame(
+            feature = names(coefs),
+            importance = abs(as.numeric(coefs))
+          )
         }
+        
+      } else if (input$model_type == "Regression Tree") {
+        
+        model <- rpart::rpart(
+          formula = model_formula,
+          data = train_data,
+          method = "anova",
+          control = rpart::rpart.control(
+            minsplit = input$minsplit,
+            cp = input$cp,
+            maxdepth = input$tree_maxdepth
+          )
+        )
+        
+        preds <- predict(model, newdata = test_data)
+        
+        if (!is.null(model$variable.importance)) {
+          importance_df <- data.frame(
+            feature = names(model$variable.importance),
+            importance = as.numeric(model$variable.importance)
+          )
+        }
+        
+      } else if (input$model_type == "Random Forest") {
         
         model <- randomForest::randomForest(
           formula = model_formula,
-          data = model_data(),
-          ntree = input$n_trees
+          data = train_data,
+          ntree = input$n_trees,
+          mtry = min(input$mtry, length(predictors)),
+          importance = TRUE
         )
+        
+        preds <- predict(model, newdata = test_data)
+        
+        rf_imp <- randomForest::importance(model)
+        
+        if (!is.null(rf_imp)) {
+          if (is.matrix(rf_imp)) {
+            importance_df <- data.frame(
+              feature = rownames(rf_imp),
+              importance = rf_imp[, 1]
+            )
+          } else {
+            importance_df <- data.frame(
+              feature = names(rf_imp),
+              importance = as.numeric(rf_imp)
+            )
+          }
+        }
+        
+      } else if (input$model_type == "XGBoost") {
+        
+        x_train <- as.matrix(train_data[, predictors, drop = FALSE])
+        y_train <- train_data[[input$target]]
+        x_test  <- as.matrix(test_data[, predictors, drop = FALSE])
+        
+        dtrain <- xgboost::xgb.DMatrix(data = x_train, label = y_train)
+        
+        params <- list(
+          objective = "reg:squarederror",
+          max_depth = input$xgb_depth,
+          eta = input$xgb_lr,
+          min_child_weight = input$xgb_min_n,
+          subsample = input$xgb_sample
+        )
+        
+        model <- xgboost::xgb.train(
+          params = params,
+          data = dtrain,
+          nrounds = input$xgb_trees,
+          verbose = 0
+        )
+        
+        preds <- predict(model, newdata = x_test)
+        
+        xgb_imp <- xgboost::xgb.importance(
+          feature_names = predictors,
+          model = model
+        )
+        
+        if (!is.null(xgb_imp) && nrow(xgb_imp) > 0) {
+          importance_df <- data.frame(
+            feature = xgb_imp$Feature,
+            importance = xgb_imp$Gain
+          )
+        }
       }
       
-      preds <- predict(model, newdata = model_data())
-      actual <- model_data()[[input$target]]
-      
+      actual <- test_data[[input$target]]
       mse <- mean((actual - preds)^2)
       rmse <- sqrt(mse)
       r2 <- 1 - sum((actual - preds)^2) / sum((actual - mean(actual))^2)
+      
+      if (nrow(importance_df) > 0) {
+        importance_df <- importance_df[order(importance_df$importance, decreasing = TRUE), , drop = FALSE]
+      }
       
       list(
         model = model,
@@ -188,7 +306,22 @@ model_server <- function(id, data) {
         mse = mse,
         rmse = rmse,
         r2 = r2,
-        predictors = predictors
+        predictors = predictors,
+        importance_df = importance_df
+      )
+    })
+    observeEvent(input$save_model, {
+      req(fitted_model())
+      
+      saved_models$results[[input$model_type]] <- list(
+        model_type = input$model_type,
+        target = input$target,
+        predictors = fitted_model()$predictors,
+        actual = fitted_model()$actual,
+        predictions = fitted_model()$predictions,
+        mse = fitted_model()$mse,
+        rmse = fitted_model()$rmse,
+        r2 = fitted_model()$r2
       )
     })
     
@@ -207,7 +340,7 @@ model_server <- function(id, data) {
       bs4ValueBox(
         value = format(round(fitted_model()$mse, 2), big.mark = ","),
         subtitle = "MSE",
-        color= "info",
+        color = "info",
         icon = icon("calculator")
       )
     })
@@ -222,7 +355,7 @@ model_server <- function(id, data) {
       )
     })
     
-    output$metrics_table <- DT::renderDT({
+    output$metrics_table <- renderDT({
       req(fitted_model())
       
       results_df <- data.frame(
@@ -231,7 +364,7 @@ model_server <- function(id, data) {
         Residual = fitted_model()$actual - fitted_model()$predictions
       )
       
-      DT::datatable(
+      datatable(
         head(results_df, 20),
         options = list(pageLength = 5, scrollX = TRUE)
       )
@@ -239,7 +372,14 @@ model_server <- function(id, data) {
     
     output$feature_plot_top <- renderPlot({
       req(fitted_model())
-      imp <- head(fitted_model()$importance_df, 10)
+      
+      imp <- fitted_model()$importance_df
+      
+      validate(
+        need(nrow(imp) > 0, paste("Feature importance is not available for", input$model_type))
+      )
+      
+      imp <- head(imp, 10)
       
       par(mar = c(5, 8, 3, 2))
       barplot(
@@ -254,7 +394,12 @@ model_server <- function(id, data) {
     
     output$feature_plot_bottom <- renderPlot({
       req(fitted_model())
+      
       imp <- fitted_model()$importance_df
+      
+      validate(
+        need(nrow(imp) > 0, paste("Feature importance is not available for", input$model_type))
+      )
       
       par(mar = c(5, 8, 3, 2))
       barplot(
@@ -286,15 +431,30 @@ model_server <- function(id, data) {
     output$model_summary <- renderPrint({
       req(fitted_model())
       
-      if (input$model_type == "Linear Regression") {
-        summary(fitted_model()$model)
-      } else if (input$model_type == "Regression Tree") {
-        summary(fitted_model()$model)
-      } else {
-        fitted_model()$model
-      }
+      model <- fitted_model()$model
+      
+      tryCatch({
+        if (input$model_type == "Linear Regression") {
+          summary(model)
+        } else if (input$model_type == "Regression Tree") {
+          summary(model)
+        } else if (input$model_type == "Random Forest") {
+          print(model)
+        } else if (input$model_type == "XGBoost") {
+          cat("XGBoost Model Summary\n")
+          cat("---------------------\n")
+          cat("Number of boosting rounds:", input$xgb_trees, "\n")
+          cat("Max depth:", input$xgb_depth, "\n")
+          cat("Learning rate:", input$xgb_lr, "\n")
+          cat("Min node size:", input$xgb_min_n, "\n")
+          cat("Sample size:", input$xgb_sample, "\n")
+        } else {
+          print(model)
+        }
+      }, error = function(e) {
+        cat("Model summary not available.\n")
+        cat("Error:", e$message)
+      })
     })
-    
   })
 }
-
