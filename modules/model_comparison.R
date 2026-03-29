@@ -153,7 +153,7 @@ comparison_server <- function(id, data, saved_models) {
       best <- m[which.max(m$R2), ]
       
       bs4ValueBox(
-        value = paste0(best$Model, " (", round(best$R2, 3), ")"),
+        value = paste0(best$Model, " (", sprintf("%.2f", best$R2), ")"),
         subtitle = HTML("Best R<sup>2</sup>"),
         color = "primary",
         icon = icon("trophy")
@@ -166,7 +166,7 @@ comparison_server <- function(id, data, saved_models) {
       best <- m[which.min(m$RMSE), ]
       
       bs4ValueBox(
-        value = paste0(best$Model, " (", round(best$RMSE, 3), ")"),
+        value = paste0(best$Model, " (", sprintf("%.2e", best$RMSE), ")"),
         subtitle = "Lowest RMSE",
         color = "success",
         icon = icon("bullseye")
@@ -179,7 +179,7 @@ comparison_server <- function(id, data, saved_models) {
       best <- m[which.min(m$MSE), ]
       
       bs4ValueBox(
-        value = paste0(best$Model, " (", round(best$MSE, 3), ")"),
+        value = paste0(best$Model, " (", sprintf("%.2e", best$MSE), ")"),
         subtitle = "Lowest MSE",
         color = "info",
         icon = icon("calculator")
@@ -207,7 +207,6 @@ comparison_server <- function(id, data, saved_models) {
         scale_fill_manual(values = model_colors) +
         labs(
           title = expression(R^2 ~ "Comparison"),
-          subtitle = "Higher is better",
           x = NULL,
           y = expression(R^2)
         ) +
@@ -226,12 +225,11 @@ comparison_server <- function(id, data, saved_models) {
       
       ggplot(df, aes(x = reorder(Model, -RMSE), y = RMSE, fill = Model)) +
         geom_col(width = 0.7) +
-        geom_text(aes(label = round(RMSE, 2)), hjust = -0.1, size = 4) +
+        geom_text(aes(label = sprintf("%.2e", RMSE)), hjust = -0.1, size = 4)+
         coord_flip() +
         scale_fill_manual(values = model_colors) +
         labs(
           title = "RMSE Comparison",
-          subtitle = "Lower is better",
           x = NULL,
           y = "RMSE"
         ) +
@@ -255,7 +253,6 @@ comparison_server <- function(id, data, saved_models) {
         scale_fill_manual(values = model_colors) +
         labs(
           title = "MSE Comparison",
-          subtitle = "Lower is better",
           x = NULL,
           y = "MSE"
         ) +

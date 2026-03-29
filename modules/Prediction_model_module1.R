@@ -7,117 +7,104 @@ model_ui <- function(id) {
   
   tagList(
     fluidRow(
-      column(
+      bs4Card(
+        title = "Select Regression Model",
         width = 4,
-        bs4Card(
-          title = "Select Regression Model",
-          width = 12,
-          status = "teal",
-          solidHeader = FALSE,
-          
-          selectInput(
-            inputId = ns("model_type"),
-            label = "Select Model",
-            choices = c("Linear Regression", "Regression Tree", "Random Forest", "XGBoost")
-          ),
-          
-          uiOutput(ns("target_ui")),
-          uiOutput(ns("predictors_ui")),
-          
-          conditionalPanel(
-            condition = sprintf("input['%s'] == 'Regression Tree'", ns("model_type")),
-            sliderInput(ns("minsplit"), "Minimum Split", min = 10, max = 100, value = 50),
-            sliderInput(ns("cp"), "Complexity Parameter", min = 0.001, max = 0.05, value = 0.01, step = 0.001),
-            sliderInput(ns("tree_maxdepth"), "Maximum Depth", min = 2, max = 20, value = 4)
-          ),
-          
-          conditionalPanel(
-            condition = sprintf("input['%s'] == 'Random Forest'", ns("model_type")),
-            sliderInput(ns("n_trees"), "Number of Trees", min = 50, max = 500, value = 100),
-            sliderInput(ns("mtry"), "mtry", min = 1, max = 10, value = 3),
-            sliderInput(ns("min_node_size"), "Minimum Node Size", min = 1, max = 20, value = 5)
-          ),
-          
-          conditionalPanel(
-            condition = sprintf("input['%s'] == 'XGBoost'", ns("model_type")),
-            sliderInput(ns("xgb_trees"), "Number of Boosting Rounds", min = 100, max = 1000, value = 500, step = 50),
-            sliderInput(ns("xgb_depth"), "Tree Depth", min = 2, max = 10, value = 6),
-            sliderInput(ns("xgb_lr"), "Learning Rate", min = 0.01, max = 0.3, value = 0.05, step = 0.01),
-            sliderInput(ns("xgb_min_n"), "Minimum Node Size", min = 1, max = 20, value = 5),
-            sliderInput(ns("xgb_sample"), "Sample Size", min = 0.5, max = 1, value = 0.8, step = 0.1)
-          ),
-          
-          actionButton(ns("run_model"), "Run Experiment", class = "btn-primary"),
-          br(), br(),
-          actionButton(ns("save_model"), "Save Current Model", class = "btn-success")
-        )
+        status = "teal",
+        solidHeader = FALSE,
+        
+        selectInput(
+          inputId = ns("model_type"),
+          label = "Select Model",
+          choices = c("Linear Regression", "Regression Tree", "Random Forest", "XGBoost")
+        ),
+        
+        uiOutput(ns("target_ui")),
+        uiOutput(ns("predictors_ui")),
+        
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'Regression Tree'", ns("model_type")),
+          sliderInput(ns("minsplit"), "Minimum Split", min = 10, max = 100, value = 50),
+          sliderInput(ns("cp"), "Complexity Parameter", min = 0.001, max = 0.05, value = 0.01, step = 0.001),
+          sliderInput(ns("tree_maxdepth"), "Maximum Depth", min = 2, max = 20, value = 4)
+        ),
+        
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'Random Forest'", ns("model_type")),
+          sliderInput(ns("n_trees"), "Number of Trees", min = 50, max = 500, value = 100),
+          sliderInput(ns("mtry"), "mtry", min = 1, max = 10, value = 3),
+          sliderInput(ns("min_node_size"), "Minimum Node Size", min = 1, max = 20, value = 5)
+        ),
+        
+        conditionalPanel(
+          condition = sprintf("input['%s'] == 'XGBoost'", ns("model_type")),
+          sliderInput(ns("xgb_trees"), "Number of Boosting Rounds", min = 100, max = 1000, value = 500, step = 50),
+          sliderInput(ns("xgb_depth"), "Tree Depth", min = 2, max = 10, value = 6),
+          sliderInput(ns("xgb_lr"), "Learning Rate", min = 0.01, max = 0.3, value = 0.05, step = 0.01),
+          sliderInput(ns("xgb_min_n"), "Minimum Node Size", min = 1, max = 20, value = 5),
+          sliderInput(ns("xgb_sample"), "Sample Size", min = 0.5, max = 1, value = 0.8, step = 0.1)
+        ),
+        
+        actionButton(ns("run_model"), "Run Experiment", class = "btn-primary"),
+        br(), br(),
+        actionButton(ns("save_model"), "Save Current Model", class = "btn-success")
       ),
       
       column(
         width = 8,
+        
         fluidRow(
-          column(
-            width = 4,
-            bs4ValueBoxOutput(ns("r2_box"), width = 12)
-          ),
-          column(
-            width = 4,
-            bs4ValueBoxOutput(ns("mse_box"), width = 12)
-          ),
-          column(
-            width = 4,
-            bs4ValueBoxOutput(ns("rmse_box"), width = 12)
-          )
+          bs4ValueBoxOutput(ns("r2_box"), width = 4),
+          bs4ValueBoxOutput(ns("mse_box"), width = 4),
+          bs4ValueBoxOutput(ns("rmse_box"), width = 4)
         ),
+        
         fluidRow(
-          column(
-            width = 12,
-            bs4Card(
-              title = "Evaluation Metrics",
-              width = 12,
-              status = "teal",
-              solidHeader = FALSE,
-              DTOutput(ns("metrics_table"))
-            )
+          bs4Card(
+            title = "Evaluation Metrics",
+            width = 7,
+            status = "teal",
+            solidHeader = FALSE,
+            DTOutput(ns("metrics_table"))
+          ),
+          
+          bs4Card(
+            title = "Feature Importance",
+            width = 5,
+            status = "teal",
+            solidHeader = FALSE,
+            plotOutput(ns("feature_plot_top"), height = "250px")
           )
         )
       )
     ),
+    
     fluidRow(
-      column(
+      bs4Card(
+        title = "Feature Importance",
         width = 4,
-        bs4Card(
-          title = "Feature Importance",
-          width = 12,
-          status = "primary",
-          solidHeader = FALSE,
-          plotOutput(ns("feature_plot_bottom"), height = "280px")
-        )
+        status = "primary",
+        solidHeader = FALSE,
+        plotOutput(ns("feature_plot_bottom"), height = "300px")
       ),
-      column(
+      
+      bs4Card(
+        title = "Actual vs Predicted",
         width = 4,
-        bs4Card(
-          title = "Actual vs Predicted",
-          width = 12,
-          status = "teal",
-          solidHeader = FALSE,
-          plotOutput(ns("scatter_plot"), height = "280px")
-        )
+        status = "teal",
+        solidHeader = FALSE,
+        plotOutput(ns("scatter_plot"), height = "300px")
       ),
-      column(
+      
+      bs4Card(
+        title = "Model Summary",
         width = 4,
-        bs4Card(
-          title = "Model Summary",
-          width = 12,
-          status = "teal",
-          solidHeader = FALSE,
-          verbatimTextOutput(ns("model_summary"))
-        )
+        status = "teal",
+        solidHeader = FALSE,
+        verbatimTextOutput(ns("model_summary"))
       )
     )
   )
-    
-  
 }
 
 model_server <- function(id, data, saved_models) {
@@ -181,6 +168,7 @@ model_server <- function(id, data, saved_models) {
       formula_text <- paste(input$target, "~", paste(predictors, collapse = " + "))
       model_formula <- as.formula(formula_text)
       
+      # Train-test split
       set.seed(123)
       df <- model_data()
       train_idx <- sample(seq_len(nrow(df)), size = floor(0.8 * nrow(df)))
@@ -322,7 +310,6 @@ model_server <- function(id, data, saved_models) {
         importance_df = importance_df
       )
     })
-    
     observeEvent(input$save_model, {
       req(fitted_model())
       
@@ -336,17 +323,12 @@ model_server <- function(id, data, saved_models) {
         rmse = fitted_model()$rmse,
         r2 = fitted_model()$r2
       )
-      
-      showNotification(
-        paste(input$model_type, "saved for comparison."),
-        type = "message"
-      )
     })
     
     output$r2_box <- renderbs4ValueBox({
       req(fitted_model())
       bs4ValueBox(
-        value = format(round(fitted_model()$r2, 2), nsmall = 2),
+        value = round(fitted_model()$r2, 3),
         subtitle = HTML("R<sup>2</sup>"),
         color = "primary",
         icon = icon("chart-line")
@@ -356,7 +338,7 @@ model_server <- function(id, data, saved_models) {
     output$mse_box <- renderbs4ValueBox({
       req(fitted_model())
       bs4ValueBox(
-        value = sprintf("%.2e", fitted_model()$mse),
+        value = format(round(fitted_model()$mse, 2), big.mark = ","),
         subtitle = "MSE",
         color = "info",
         icon = icon("calculator")
@@ -366,7 +348,7 @@ model_server <- function(id, data, saved_models) {
     output$rmse_box <- renderbs4ValueBox({
       req(fitted_model())
       bs4ValueBox(
-        value = sprintf("%.2e", fitted_model()$rmse),
+        value = format(round(fitted_model()$rmse, 2), big.mark = ","),
         subtitle = "RMSE",
         color = "warning",
         icon = icon("square-root-alt")
@@ -388,6 +370,27 @@ model_server <- function(id, data, saved_models) {
       )
     })
     
+    output$feature_plot_top <- renderPlot({
+      req(fitted_model())
+      
+      imp <- fitted_model()$importance_df
+      
+      validate(
+        need(nrow(imp) > 0, paste("Feature importance is not available for", input$model_type))
+      )
+      
+      imp <- head(imp, 10)
+      
+      par(mar = c(5, 8, 3, 2))
+      barplot(
+        rev(imp$importance),
+        names.arg = rev(imp$feature),
+        horiz = TRUE,
+        las = 1,
+        col = "steelblue",
+        main = "Top 10 Features"
+      )
+    })
     
     output$feature_plot_bottom <- renderPlot({
       req(fitted_model())
