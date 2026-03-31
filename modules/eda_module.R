@@ -1,6 +1,9 @@
 eda_ui <- function(id) {
   ns <- NS(id)
   
+  # Setup teal
+  teal_col <- "#20B2AA"
+  
   tagList(
     tags$style(HTML("
       .eda-title {
@@ -42,7 +45,7 @@ eda_ui <- function(id) {
     
     div(
       class = "eda-desc",
-      "This is the first part of the R-Shiny application where users can perform Exploratory Data Analysis on two datasets. Users may select any variable and the application will automatically generate the appropriate visualisation."
+      "This is the first part of the R-Shiny application where users can perform Exploratory Data Analysis on the currently loaded and cleaned dataset. Users may select any variable and the application will automatically generate the appropriate visualisation."
     ),
     
     tabsetPanel(
@@ -56,15 +59,6 @@ eda_ui <- function(id) {
             width = 4,
             div(
               class = "eda-side-card",
-              radioButtons(
-                inputId = ns("dataset_choice"),
-                label = strong("Type of Dataset"),
-                choices = c(
-                  "Customer Data" = "customer",
-                  "Transactions Data" = "transactions"
-                ),
-                selected = "customer"
-              ),
               uiOutput(ns("variable_ui")),
               uiOutput(ns("log_scale_ui"))
             )
@@ -106,9 +100,8 @@ eda_server <- function(id, data = NULL) {
   moduleServer(id, function(input, output, session) {
     
     pretty_label <- function(x) {
-      x |>
-        gsub("_", " ", x = _) |>
-        tools::toTitleCase()
+      x <- gsub("_", " ", x)
+      tools::toTitleCase(x)
     }
     
     detect_var_type <- function(x) {
@@ -129,76 +122,9 @@ eda_server <- function(id, data = NULL) {
       max(x, na.rm = TRUE) > med + 3 * iqr_val
     }
     
-    read_csv_safe <- function(path_options) {
-      for (p in path_options) {
-        if (file.exists(p)) {
-          return(readr::read_csv(p, show_col_types = FALSE))
-        }
-      }
-      return(NULL)
-    }
-    
-    customer_data <- reactiveVal(NULL)
-    transactions_data <- reactiveVal(NULL)
-    
-    observe({
-      customer_df <- read_csv_safe(c(
-        "customer_data.csv",
-        "data/customer_data.csv",
-        "/mnt/data/customer_data.csv"
-      ))
-      
-      transactions_df <- read_csv_safe(c(
-        "transactions_data.csv",
-        "data/transactions_data.csv",
-        "/mnt/data/transactions_data.csv"
-      ))
-      
-      if (!is.null(customer_df)) {
-        date_cols <- c(
-          "first_tx", "last_tx", "last_survey_date",
-          "last_transaction_date", "first_transaction_date"
-        )
-        for (col in date_cols) {
-          if (col %in% names(customer_df)) {
-            customer_df[[col]] <- as.Date(customer_df[[col]])
-          }
-        }
-        
-        logical_like_cols <- c(
-          "savings_account", "credit_card", "personal_loan",
-          "investment_account", "insurance_product",
-          "bill_payment_user", "auto_savings_enabled"
-        )
-        for (col in logical_like_cols) {
-          if (col %in% names(customer_df)) {
-            customer_df[[col]] <- factor(
-              customer_df[[col]],
-              levels = c(FALSE, TRUE),
-              labels = c("No", "Yes")
-            )
-          }
-        }
-        
-        customer_data(customer_df)
-      }
-      
-      if (!is.null(transactions_df)) {
-        if ("date" %in% names(transactions_df)) {
-          transactions_df$date <- as.Date(transactions_df$date)
-        }
-        transactions_data(transactions_df)
-      }
-    })
-    
     current_data <- reactive({
-      if (input$dataset_choice == "customer") {
-        req(customer_data())
-        customer_data()
-      } else {
-        req(transactions_data())
-        transactions_data()
-      }
+      req(data())
+      data()
     })
     
     numeric_cols <- reactive({
@@ -252,7 +178,7 @@ eda_server <- function(id, data = NULL) {
           p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = .data[[var_name]])) +
             ggplot2::geom_histogram(
               bins = 30,
-              fill = "#5DADE2",
+              fill = teal_col,
               color = "white",
               alpha = 0.9
             ) +
@@ -271,7 +197,7 @@ eda_server <- function(id, data = NULL) {
           p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = .data[[var_name]])) +
             ggplot2::geom_histogram(
               bins = 30,
-              fill = "#5DADE2",
+              fill = teal_col,
               color = "white",
               alpha = 0.9
             ) +
@@ -424,7 +350,6 @@ eda_server <- function(id, data = NULL) {
     
     output$scatter_x_ui <- renderUI({
       req(numeric_cols())
-      
       selectInput(
         inputId = session$ns("x_var"),
         label = strong("X Variable"),
@@ -474,4 +399,3 @@ eda_server <- function(id, data = NULL) {
     })
   })
 }
-

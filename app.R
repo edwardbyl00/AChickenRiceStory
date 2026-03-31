@@ -17,18 +17,20 @@ source("modules/model_comparison.R")
 ui <- dashboardPage(
   dark = FALSE,
   fullscreen = FALSE,
+  controlbar = NULL,
   
   header = dashboardHeader(
     title = dashboardBrand(
-      title = "A Chicken Rice Story",
+      title = "ChickinSights",
       color = "teal"
     ),
-    skin = "light"
+    skin = "light",
+    rightUi = NULL
   ),
   
   sidebar = dashboardSidebar(
     skin = "light",
-    status = "primary",
+    status = "lightblue",
     elevation = 3,
     
     #     Left Sidebar
@@ -61,9 +63,71 @@ ui <- dashboardPage(
           background-color: #f8f9fc !important;
         }
         .btn-primary {
-          background-color: #5B8FF9;
-          border-color: #5B8FF9;
+          background-color: #20c997 !important;
+          border-color: #20c997 !important;
+          color: white !important;
         }
+        .btn-primary:hover {
+          background-color: #17a589 !important;
+          border-color: #17a589 !important;
+          color: white !important;
+        }
+
+        /* clean top navbar */
+        .main-header {
+          border-bottom: 1px solid #e5e7eb !important;
+          box-shadow: none !important;
+        }
+        .main-header .navbar {
+          background-color: #ffffff !important;
+          box-shadow: none !important;
+          min-height: 60px;
+        }
+
+        /* hide stubborn top right controls */
+        .main-header .navbar-custom-menu,
+        .main-header .navbar-right,
+        .main-header .dark-mode-switch,
+        .main-header [data-widget='fullscreen'],
+        .main-header [data-widget='control-sidebar'] {
+          display: none !important;
+        }
+
+        /* keep left sidebar toggle only */
+        .main-header .nav-link {
+          color: #4b5563 !important;
+          font-size: 18px;
+        }
+
+        /* cleaner page spacing */
+        .content-wrapper > .content {
+          padding-top: 18px;
+        }
+      ")),
+      
+      tags$script(HTML("
+        document.addEventListener('DOMContentLoaded', function() {
+          const selectors = [
+            '.main-header .navbar-custom-menu',
+            '.main-header .navbar-right',
+            '.main-header .dark-mode-switch',
+            '.main-header [data-widget=\"fullscreen\"]',
+            '.main-header [data-widget=\"control-sidebar\"]'
+          ];
+          
+          selectors.forEach(function(sel) {
+            document.querySelectorAll(sel).forEach(function(el) {
+              el.remove();
+            });
+          });
+          
+          const headerLists = document.querySelectorAll('.main-header .navbar > ul');
+          if (headerLists.length > 1) {
+            for (let i = 1; i < headerLists.length; i++) {
+              headerLists[i].remove();
+            }
+          }
+        });
       "))
     ),
     
@@ -106,13 +170,13 @@ ui <- dashboardPage(
               choices = NULL
             ),
             
-            actionButton("load_saved", "Load Selected Dataset", class = "btn-primary"),
+            actionButton("load_saved", "Load Selected Dataset", class = "btn btn-primary"),
             
             br(), br(),
             verbatimTextOutput("file_status"),
             
             br(), br(),
-            actionButton("clear_uploads", "Clear Saved Files", class = "btn-danger")
+            actionButton("clear_uploads", "Clear Saved Files", class = "btn btn-danger")
           )
         ),
         
@@ -122,16 +186,12 @@ ui <- dashboardPage(
             width = 12,
             status = "teal",
             solidHeader = FALSE,
-            
-            # optional visualisation can go here later
-            # plotlyOutput("data_distribution_plot", height = "250px"),
-            # br(),
-            
             DTOutput("data_preview")
           )
         )
       ),
       
+      # Data cleaning tab
       tabItem(
         tabName = "cleaning",
         
@@ -161,13 +221,14 @@ ui <- dashboardPage(
             
             tags$div(
               style = "background-color:#eef5ff; padding:10px; border-radius:8px; margin-bottom:10px;",
+              # Description for data types
               HTML("
-          <b>Column Type Guide</b><br>
-          • <b>Numeric</b>: Used for calculations (e.g., sales, price)<br>
-          • <b>Character</b>: Free text (e.g., names, IDs)<br>
-          • <b>Factor</b>: Categories with limited groups (e.g., gender, product type)<br>
-          • <b>Date</b>: Time-based values (e.g., 2023-01-01)
-        ")
+                <b>Column Type Guide</b><br>
+                • <b>Numeric</b>: Used for calculations (e.g., sales, price)<br>
+                • <b>Character</b>: Free text (e.g., names, IDs)<br>
+                • <b>Factor</b>: Categories with limited groups (e.g. gender, product type)<br>
+                • <b>Date</b>: Time-based values (e.g., 2023-01-01)
+              ")
             ),
             
             uiOutput("convert_column_ui"),
@@ -176,7 +237,7 @@ ui <- dashboardPage(
               "Convert To",
               choices = c("numeric", "character", "factor", "Date")
             ),
-            actionButton("apply_conversion", "Apply Conversion", class = "btn-primary"),
+            actionButton("apply_conversion", "Apply Conversion", class = "btn btn-primary"),
             
             br(), br(),
             
@@ -185,13 +246,13 @@ ui <- dashboardPage(
               "Upload Column Type Mapping CSV",
               accept = c(".csv")
             ),
-            helpText("Mapping file must contain: column_name, target_type"),
-            
-            downloadButton("download_type_mapping_template", "Download Mapping Template"),
-            br(), br(),
             helpText("Fill in 'target_type' only. Leave blank if no change is needed."),
             
-            actionButton("apply_mapping_conversion", "Apply Mapping File", class = "btn-primary")
+            downloadButton("download_type_mapping_template", "Download Mapping Template"),
+            
+            br(), br(),
+            
+            actionButton("apply_mapping_conversion", "Apply Mapping File", class = "btn btn-primary")
           ),
           
           bs4Card(
@@ -201,7 +262,7 @@ ui <- dashboardPage(
             solidHeader = FALSE,
             
             uiOutput("drop_columns_ui"),
-            actionButton("drop_columns_btn", "Drop Selected Columns", class = "btn-danger"),
+            actionButton("drop_columns_btn", "Drop Selected Columns", class = "btn btn-danger"),
             
             br(), br(),
             
@@ -215,7 +276,7 @@ ui <- dashboardPage(
               value = 50
             ),
             
-            actionButton("apply_cleaning", "Apply Row Cleaning", class = "btn-warning"),
+            actionButton("apply_cleaning", "Apply Row Cleaning", class = "btn btn-warning"),
             br(), br(),
             downloadButton("download_cleaned", "Download Current Dataset")
           )
@@ -325,6 +386,16 @@ server <- function(input, output, session) {
     updateSelectInput(session, "saved_file", choices = files)
   })
   
+  # Update column choice in upload data
+  observe({
+    req(active_data())
+    updateSelectInput(
+      session,
+      "dist_column",
+      choices = names(active_data())
+    )
+  })
+  
   # load uploaded file into active_data
   observeEvent(input$file_upload, {
     req(input$file_upload)
@@ -371,6 +442,7 @@ server <- function(input, output, session) {
       "No dataset loaded yet."
     }
   })
+  
   
   # VALUE BOXES (FIXED)
   output$n_rows <- renderbs4ValueBox({
@@ -741,10 +813,11 @@ server <- function(input, output, session) {
   # DATA PREVIEW (FIXED)
   output$data_preview <- renderDT({
     req(active_data())
-    datatable(
-      head(active_data(), 20),
-      options = list(scrollX = TRUE, pageLength = 10)
-    )
+    datatable(active_data(), options = list(scrollX = TRUE)) %>%
+      formatStyle(
+        columns = names(active_data()),
+        backgroundColor = styleEqual(NA, "#ffe6e6")
+      )
   })
   
   # MODULES (FIXED)
