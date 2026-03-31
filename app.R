@@ -21,11 +21,13 @@ ui <- dashboardPage(
   
   header = dashboardHeader(
     title = dashboardBrand(
-      title = "ChickinSights",
+      title = tags$div(
+        tags$img(src = "ChickinSights_logo.png", height = "30px"),
+        tags$span(" ChickInsights", style = "margin-left:8px; font-weight:600;")
+      ),
       color = "teal"
     ),
-    skin = "light",
-    rightUi = NULL
+    skin = "light"
   ),
   
   sidebar = dashboardSidebar(
