@@ -474,4 +474,3 @@ eda_server <- function(id, data = NULL) {
     })
   })
 }
-
