@@ -255,6 +255,7 @@ ui <- dashboardPage(
             br(), br(),
             
             actionButton("apply_mapping_conversion", "Apply Mapping File", class = "btn btn-primary")
+            
           ),
           
           bs4Card(
@@ -279,8 +280,16 @@ ui <- dashboardPage(
             ),
             
             actionButton("apply_cleaning", "Apply Row Cleaning", class = "btn btn-warning"),
+            
             br(), br(),
-            downloadButton("download_cleaned", "Download Current Dataset")
+            tags$div(
+              style = "display:flex; justify-content:space-between; align-items:center;",
+              
+              downloadButton("download_cleaned", "Download Current Dataset", class = "btn btn-primary"),
+              
+              actionButton("save_current_data", "Save Current Dataset", class = "btn btn-danger")
+            )
+           
           )
         ),
         
@@ -811,6 +820,18 @@ server <- function(input, output, session) {
       write.csv(active_data(), file, row.names = FALSE)
     }
   )
+  
+  # Save categorical changes
+  observeEvent(input$save_current_data, {
+    req(active_data())
+    
+    new_name <- paste0("cleaned_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv")
+    file_path <- file.path("data/uploads", new_name)
+    
+    write.csv(active_data(), file_path, row.names = FALSE)
+    
+    showNotification(paste("Saved as", new_name), type = "message")
+  })
   
   # DATA PREVIEW (FIXED)
   output$data_preview <- renderDT({

@@ -1,6 +1,5 @@
 eda_ui <- function(id) {
   ns <- NS(id)
-
   
   tagList(
     tags$style(HTML("
@@ -14,16 +13,9 @@ eda_ui <- function(id) {
         line-height: 1.8;
         margin-bottom: 18px;
       }
-      .eda-side-card {
-        background: #ffffff;
-        border: 1px solid #d9d9d9;
-        border-radius: 14px;
-        padding: 16px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-      }
       .eda-summary-box {
         background-color: #f3f4f6;
-        border-left: 5px solid #5DADE2;
+        border-left: 5px solid #20B2AA;
         padding: 16px;
         border-radius: 10px;
         margin-top: 18px;
@@ -55,8 +47,12 @@ eda_ui <- function(id) {
         fluidRow(
           column(
             width = 4,
-            div(
-              class = "eda-side-card",
+            bs4Card(
+              title = "Variable Selection",
+              width = 12,
+              status = "teal",
+              solidHeader = FALSE,
+              
               uiOutput(ns("variable_ui")),
               uiOutput(ns("log_scale_ui"))
             )
@@ -64,9 +60,15 @@ eda_ui <- function(id) {
           
           column(
             width = 8,
-            h2(strong("Univariate Analysis")),
-            plotlyOutput(ns("uni_plot"), height = "500px"),
-            div(class = "eda-summary-box", htmlOutput(ns("interpretation_text")))
+            bs4Card(
+              title = "Univariate Analysis",
+              width = 12,
+              status = "teal",
+              solidHeader = FALSE,
+              
+              plotlyOutput(ns("uni_plot"), height = "500px"),
+              div(class = "eda-summary-box", htmlOutput(ns("interpretation_text")))
+            )
           )
         )
       ),
@@ -77,16 +79,27 @@ eda_ui <- function(id) {
         fluidRow(
           column(
             width = 4,
-            div(
-              class = "eda-side-card",
+            bs4Card(
+              title = "Variable Selection",
+              width = 12,
+              status = "teal",
+              solidHeader = FALSE,
+              
               uiOutput(ns("scatter_x_ui")),
               uiOutput(ns("scatter_y_ui"))
             )
           ),
+          
           column(
             width = 8,
-            h2(strong("Bivariate Analysis")),
-            plotlyOutput(ns("scatter_plot"), height = "500px")
+            bs4Card(
+              title = "Bivariate Analysis",
+              width = 12,
+              status = "teal",
+              solidHeader = FALSE,
+              
+              plotlyOutput(ns("scatter_plot"), height = "500px")
+            )
           )
         )
       )
