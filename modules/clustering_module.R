@@ -26,62 +26,83 @@ clustering_ui <- function(id) {
               solidHeader = FALSE,
               p("Select at least 2 numeric variables."),
               p("Use Update Features to refresh the correlation matrix."),
-              p("Then move to Cluster Analysis.")
+              p("Then move to Cluster Selection.")
             )
           ),
           column(
             width = 9,
             bs4Card(
               title = "Correlation Matrix of Selected Clustering Features",
-              width = 9,
+              width = 12,
               status = "teal",
               solidHeader = FALSE,
               plotOutput(ns("corr_plot"), height = "500px")
             )
-          ),
+          )
         )
       ),
       
       tabPanel(
-        "Cluster Analysis",
+        "Cluster Selection",
         
+        # row 1 controls + number of customers
         fluidRow(
-          
-          # LEFT PANEL
           column(
-            width = 4,
-            
+            width = 6,
             bs4Card(
               title = "Clustering Controls",
               width = 12,
               status = "teal",
               solidHeader = FALSE,
               
-              sliderInput(
-                ns("k"),
-                "Number of Clusters",
-                min = 2,
-                max = 10,
-                value = 4,
-                step = 1
-              ),
-              
-              br(),
-              
-              actionButton(ns("run_cluster"), "Run Clustering", class = "btn-teal"),
-              br(), br(),
-              
-              downloadButton(ns("export_clusters"), "Export Cluster Groupings")
-            ),
-            
+              fluidRow(
+                column(
+                  width = 6,
+                  sliderInput(
+                    ns("k"),
+                    "Number of Clusters",
+                    min = 2,
+                    max = 10,
+                    value = 4,
+                    step = 1
+                  )
+                ),
+                column(
+                  width = 6,
+                  br(),
+                  downloadButton(ns("export_clusters"), "Export Cluster Groupings")
+                )
+              )
+            )
+          ),
+          
+          column(
+            width = 6,
+            bs4Card(
+              title = "Number of Customers by Cluster",
+              width = 12,
+              status = "teal",
+              solidHeader = FALSE,
+              plotOutput(ns("cluster_size_plot"), height = "300px")
+            )
+          )
+        ),
+        
+        # row 2 elbow + silhouette
+        fluidRow(
+          column(
+            width = 6,
             bs4Card(
               title = "Elbow Plot",
               width = 12,
               status = "teal",
               solidHeader = FALSE,
-              plotOutput(ns("elbow_plot"), height = "280px")
-            ),
-            
+              plotOutput(ns("elbow_plot"), height = "300px")
+            )
+          ),
+          
+          column(
+            width = 6,
             bs4Card(
               title = "Average Silhouette Score by Number of Clusters",
               width = 12,
@@ -90,59 +111,100 @@ clustering_ui <- function(id) {
               plotOutput(ns("silhouette_plot"), height = "300px"),
               p("Silhouette is computed on a sample for speed.")
             )
+          )
+        )
+      ),
+      
+      tabPanel(
+        "Cluster Analysis",
+        
+        # row 1 summary so user remembers setup
+        fluidRow(
+          column(
+            width = 3,
+            bs4Card(
+              title = "Selected K",
+              width = 12,
+              status = "teal",
+              solidHeader = FALSE,
+              style = "text-align:center; min-height: 150px;",
+              br(),
+              h2(textOutput(ns("selected_k_text")), style = "font-weight:700; margin-bottom:8px;"),
+              p("Number of Clusters", style = "color:#6c757d; margin-bottom:0;")
+            )
+          ),
+          column(
+            width = 3,
+            bs4Card(
+              title = "Silhouette Score",
+              width = 12,
+              status = "teal",
+              solidHeader = FALSE,
+              style = "text-align:center; min-height: 150px;",
+              br(),
+              h2(textOutput(ns("selected_silhouette_text")), style = "font-weight:700; margin-bottom:8px;"),
+              p("Average Separation", style = "color:#6c757d; margin-bottom:0;")
+            )
+          ),
+          column(
+            width = 6,
+            bs4Card(
+              title = "Clustering Settings",
+              width = 12,
+              status = "teal",
+              solidHeader = FALSE,
+              style = "min-height: 150px;",
+              htmlOutput(ns("selected_features_text"))
+            )
+          )
+        ),
+        
+        # row 2 cluster heatmap
+        fluidRow(
+          bs4Card(
+            title = "Cluster Feature Heatmap",
+            width = 6,
+            status = "teal",
+            solidHeader = FALSE,
+            maximizable = TRUE,
+            
+            downloadButton(ns("download_heatmap"), "Download Plot"),
+            br(), br(),
+            
+            plotOutput(ns("heatmap_plot"), height = "320px")
+          ),
+          bs4Card(
+            title = "Number of Customers by Cluster",
+            width = 6,
+            status = "teal",
+            solidHeader = FALSE,
+            plotOutput(ns("cluster_size_plot_analysis"), height = "300px")
+          )
+        ),
+        
+        # row 3 parallel + pca
+        fluidRow(
+          column(
+            width = 6,
+            bs4Card(
+              title = "Parallel Plot by Cluster Mean",
+              width = 12,
+              status = "teal",
+              solidHeader = FALSE,
+              maximizable = TRUE,
+              plotOutput(ns("parallel_plot"), height = "320px")
+            )
           ),
           
-          # RIGHT PANEL
           column(
-            width = 8,
-            
-            fluidRow(
-              column(
-                width = 12,
-                bs4Card(
-                  title = "Parallel Plot by Cluster Mean",
-                  width = 12,
-                  status = "teal",
-                  solidHeader = FALSE,
-                  plotOutput(ns("parallel_plot"), height = "300px")
-                )
-              )
-            ),
-            
-            fluidRow(
-              column(
-                width = 12,
-                bs4Card(
-                  title = "Customer Cluster Visualisation",
-                  width = 12,
-                  status = "teal",
-                  solidHeader = FALSE,
-                  plotOutput(ns("pca_plot"), height = "300px")
-                )
-              )
-            ),
-            
-            fluidRow(
-              column(
-                width = 12,
-                bs4Card(
-                  title = "Number of Customers by Cluster",
-                  width = 12,
-                  status = "teal",
-                  solidHeader = FALSE,
-                  plotOutput(ns("cluster_size_plot"), height = "300px")
-                )
-              ),
-              column(
-                width = 12,
-                bs4Card(
-                  title = "Cluster Feature Heatmap",
-                  width = 12,
-                  status = "teal",
-                  solidHeader = FALSE,
-                  plotOutput(ns("heatmap_plot"), height = "300px")
-                )
-              )
+            width = 6,
+            bs4Card(
+              title = "Customer Cluster Visualisation",
+              width = 12,
+              status = "teal",
+              solidHeader = FALSE,
+              maximizable = TRUE,
+              plotOutput(ns("pca_plot"), height = "320px")
             )
           )
         )
@@ -248,11 +310,12 @@ clustering_server <- function(id, data) {
         )
     }, height = 500)
     
-    # elbow plot
-    output$elbow_plot <- renderPlot({
+    # elbow data over fixed range
+    elbow_data <- reactive({
       req(scaled_features())
       
-      max_k <- min(input$k, nrow(scaled_features()) - 1)
+      sf <- scaled_features()
+      max_k <- min(10, nrow(sf) - 1)
       
       validate(
         need(max_k >= 2, "Not enough rows to compute elbow plot.")
@@ -263,7 +326,7 @@ clustering_server <- function(id, data) {
       set.seed(888)
       for (k in 1:max_k) {
         km <- kmeans(
-          scaled_features(),
+          sf,
           centers = k,
           nstart = 10,
           iter.max = 200,
@@ -272,27 +335,31 @@ clustering_server <- function(id, data) {
         wcss[k] <- km$tot.withinss
       }
       
-      elbow_df <- data.frame(
+      data.frame(
         k = 1:max_k,
         wcss = wcss
       )
+    })
+    
+    # elbow plot
+    output$elbow_plot <- renderPlot({
+      req(elbow_data())
       
-      ggplot(elbow_df, aes(x = k, y = wcss)) +
+      ggplot(elbow_data(), aes(x = k, y = wcss)) +
         geom_line() +
         geom_point(size = 2) +
-        scale_x_continuous(breaks = 1:max_k) +
+        scale_x_continuous(breaks = elbow_data()$k) +
         labs(
           title = "Elbow Plot of K Means Clustering",
           x = "Number of Clusters",
           y = "Within Cluster SSE"
         ) +
         theme_minimal()
-    }, height = 280)
+    }, height = 300)
     
-    # silhouette data runs only when button is clicked
+    # silhouette data over fixed range
     silhouette_data <- reactive({
       req(scaled_features())
-      req(input$k)
       
       sf <- scaled_features()
       
@@ -301,7 +368,7 @@ clustering_server <- function(id, data) {
         sf <- sf[sample(nrow(sf), 1000), , drop = FALSE]
       }
       
-      max_k <- min(input$k, nrow(sf) - 1)
+      max_k <- min(10, nrow(sf) - 1)
       
       validate(
         need(max_k >= 2, "Need at least k >= 2 for silhouette.")
@@ -331,21 +398,6 @@ clustering_server <- function(id, data) {
       sil_summary
     })
     
-    # Add best k value box
-    output$best_k_box <- renderbs4ValueBox({
-      req(silhouette_data())
-      
-      best_k <- silhouette_data()$k[which.max(silhouette_data()$avg_silhouette)]
-      best_score <- max(silhouette_data()$avg_silhouette)
-      
-      bs4ValueBox(
-        value = best_k,
-        subtitle = paste0("Recommended K (Silhouette = ", round(best_score, 3), ")"),
-        color = "teal",
-        icon = icon("chart-line")
-      )
-    })
-    
     # silhouette plot
     output$silhouette_plot <- renderPlot({
       req(silhouette_data())
@@ -373,8 +425,8 @@ clustering_server <- function(id, data) {
         )
     }, height = 300)
     
-    # run clustering only when button is clicked
-    cluster_result <- eventReactive(input$run_cluster, {
+    # clustering updates automatically when inputs change
+    cluster_result <- reactive({
       req(scaled_features())
       
       validate(
@@ -409,6 +461,60 @@ clustering_server <- function(id, data) {
       )
     })
     
+    # selected k value box
+    output$selected_k_text <- renderText({
+      req(cluster_result())
+      input$k
+    })
+    
+    output$selected_silhouette_text <- renderText({
+      req(cluster_result())
+      req(silhouette_data())
+      
+      sil_df <- silhouette_data()
+      selected_score <- sil_df$avg_silhouette[sil_df$k == input$k]
+      
+      validate(
+        need(length(selected_score) == 1, "Silhouette score not available for selected k.")
+      )
+      
+      round(selected_score, 3)
+    })
+    
+    # selected silhouette score value box
+    output$selected_silhouette_box <- renderbs4ValueBox({
+      req(cluster_result())
+      req(silhouette_data())
+      
+      sil_df <- silhouette_data()
+      selected_score <- sil_df$avg_silhouette[sil_df$k == input$k]
+      
+      validate(
+        need(length(selected_score) == 1, "Silhouette score not available for selected k.")
+      )
+      
+      bs4ValueBox(
+        value = round(selected_score, 3),
+        subtitle = "Silhouette",
+        color = "teal",
+        icon = icon("chart-line")
+      )
+    })
+    
+    # selected features text
+    output$selected_features_text <- renderUI({
+      req(cluster_result())
+      req(selected_features())
+      
+      tags$div(
+        style = "padding-top: 10px; font-size: 15px; line-height: 1.8;",
+        HTML(paste0(
+          "<b>Features used:</b> ", paste(selected_features(), collapse = ", "),
+          "<br><b>Selected k:</b> ", input$k
+        ))
+      )
+    })
+    
     # parallel plot by cluster mean
     output$parallel_plot <- renderPlot({
       req(cluster_result())
@@ -435,7 +541,7 @@ clustering_server <- function(id, data) {
         theme(
           axis.text.x = element_text(angle = 20, hjust = 1)
         )
-    }, height = 300)
+    }, height = 320)
     
     # PCA cluster visualisation
     output$pca_plot <- renderPlot({
@@ -453,9 +559,9 @@ clustering_server <- function(id, data) {
           color = "Cluster"
         ) +
         theme_minimal()
-    }, height = 300)
+    }, height = 320)
     
-    # cluster size plot
+    # cluster size plot for selection tab
     output$cluster_size_plot <- renderPlot({
       req(cluster_result())
       
@@ -475,8 +581,28 @@ clustering_server <- function(id, data) {
         theme(legend.position = "none")
     }, height = 300)
     
+    # cluster size plot for analysis tab
+    output$cluster_size_plot_analysis <- renderPlot({
+      req(cluster_result())
+      
+      cluster_size <- cluster_result()$clustered_df %>%
+        count(cluster) %>%
+        mutate(pct = n / sum(n))
+      
+      ggplot(cluster_size, aes(x = cluster, y = n, fill = cluster)) +
+        geom_col() +
+        geom_text(aes(label = scales::percent(pct, accuracy = 0.1)), vjust = -0.3) +
+        labs(
+          x = "Cluster",
+          y = "Customers",
+          fill = "Cluster"
+        ) +
+        theme_minimal() +
+        theme(legend.position = "none")
+    }, height = 300)
+    
     # cluster feature heatmap based on median values
-    output$heatmap_plot <- renderPlot({
+    heatmap_plot_obj <- reactive({
       req(cluster_result())
       
       cluster_median <- cluster_result()$clustered_df %>%
@@ -501,7 +627,28 @@ clustering_server <- function(id, data) {
         theme(
           axis.text.x = element_text(angle = 25, hjust = 1)
         )
-    }, height = 300)
+    })
+    
+    # render
+    output$heatmap_plot <- renderPlot({
+      heatmap_plot_obj()
+    }, height = 320)
+    
+    # download heatmap
+    output$download_heatmap <- downloadHandler(
+      filename = function() {
+        paste0("cluster_heatmap_", Sys.Date(), ".png")
+      },
+      content = function(file) {
+        ggplot2::ggsave(
+          filename = file,
+          plot = heatmap_plot_obj(),
+          width = 10,
+          height = 5,
+          dpi = 300
+        )
+      }
+    )
     
     # export clustered data
     output$export_clusters <- downloadHandler(

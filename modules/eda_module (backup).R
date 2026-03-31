@@ -13,9 +13,16 @@ eda_ui <- function(id) {
         line-height: 1.8;
         margin-bottom: 18px;
       }
+      .eda-side-card {
+        background: #ffffff;
+        border: 1px solid #d9d9d9;
+        border-radius: 14px;
+        padding: 16px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      }
       .eda-summary-box {
         background-color: #f3f4f6;
-        border-left: 5px solid #20B2AA;
+        border-left: 5px solid #5DADE2;
         padding: 16px;
         border-radius: 10px;
         margin-top: 18px;
@@ -35,7 +42,7 @@ eda_ui <- function(id) {
     
     div(
       class = "eda-desc",
-      "This is the first part of the R-Shiny application where users can perform Exploratory Data Analysis on the currently loaded and cleaned dataset. Users may select any variable and the application will automatically generate the appropriate visualisation."
+      "This is the first part of the R-Shiny application where users can perform Exploratory Data Analysis on two datasets. Users may select any variable and the application will automatically generate the appropriate visualisation."
     ),
     
     tabsetPanel(
@@ -47,12 +54,17 @@ eda_ui <- function(id) {
         fluidRow(
           column(
             width = 4,
-            bs4Card(
-              title = "Variable Selection",
-              width = 12,
-              status = "teal",
-              solidHeader = FALSE,
-              
+            div(
+              class = "eda-side-card",
+              radioButtons(
+                inputId = ns("dataset_choice"),
+                label = strong("Type of Dataset"),
+                choices = c(
+                  "Customer Data" = "customer",
+                  "Transactions Data" = "transactions"
+                ),
+                selected = "customer"
+              ),
               uiOutput(ns("variable_ui")),
               uiOutput(ns("log_scale_ui"))
             )
@@ -60,15 +72,9 @@ eda_ui <- function(id) {
           
           column(
             width = 8,
-            bs4Card(
-              title = "Univariate Analysis",
-              width = 12,
-              status = "teal",
-              solidHeader = FALSE,
-              
-              plotlyOutput(ns("uni_plot"), height = "500px"),
-              div(class = "eda-summary-box", htmlOutput(ns("interpretation_text")))
-            )
+            h2(strong("Univariate Analysis")),
+            plotlyOutput(ns("uni_plot"), height = "500px"),
+            div(class = "eda-summary-box", htmlOutput(ns("interpretation_text")))
           )
         )
       ),
@@ -79,27 +85,16 @@ eda_ui <- function(id) {
         fluidRow(
           column(
             width = 4,
-            bs4Card(
-              title = "Variable Selection",
-              width = 12,
-              status = "teal",
-              solidHeader = FALSE,
-              
+            div(
+              class = "eda-side-card",
               uiOutput(ns("scatter_x_ui")),
               uiOutput(ns("scatter_y_ui"))
             )
           ),
-          
           column(
             width = 8,
-            bs4Card(
-              title = "Bivariate Analysis",
-              width = 12,
-              status = "teal",
-              solidHeader = FALSE,
-              
-              plotlyOutput(ns("scatter_plot"), height = "500px")
-            )
+            h2(strong("Bivariate Analysis")),
+            plotlyOutput(ns("scatter_plot"), height = "500px")
           )
         )
       )
@@ -110,35 +105,16 @@ eda_ui <- function(id) {
 eda_server <- function(id, data = NULL) {
   moduleServer(id, function(input, output, session) {
     
-    teal_col <- "#20B2AA"
-    
     pretty_label <- function(x) {
-      x <- gsub("_", " ", x)
-      tools::toTitleCase(x)
+      x |>
+        gsub("_", " ", x = _) |>
+        tools::toTitleCase()
     }
     
-    detect_var_type <- function(x, var_name = NULL) {
+    detect_var_type <- function(x) {
       if (inherits(x, "Date")) return("date")
-      
-      if (!is.null(var_name)) {
-        id_pattern <- "(^id$|_id$|id_|customer_id|account_id|transaction_id|member_id|user_id)"
-        if (grepl(id_pattern, tolower(var_name))) {
-          return("identifier")
-        }
-      }
-      
+      if (is.numeric(x) || is.integer(x)) return("numeric")
       if (is.factor(x) || is.character(x) || is.logical(x)) return("categorical")
-      
-      if (is.numeric(x) || is.integer(x)) {
-        unique_ratio <- dplyr::n_distinct(x, na.rm = TRUE) / sum(!is.na(x))
-        
-        if (unique_ratio > 0.9) {
-          return("identifier")
-        }
-        
-        return("numeric")
-      }
-      
       return("other")
     }
     
@@ -153,96 +129,91 @@ eda_server <- function(id, data = NULL) {
       max(x, na.rm = TRUE) > med + 3 * iqr_val
     }
     
-#     Helper to detect ID columns
-    is_identifier <- function(x, name) {
-      name <- tolower(name)
-      
-      # name-based rule
-      if (grepl("(^id$|_id$|id_|customer_id|account_id|transaction_id|member_id|user_id)", name)) {
-        return(TRUE)
+    read_csv_safe <- function(path_options) {
+      for (p in path_options) {
+        if (file.exists(p)) {
+          return(readr::read_csv(p, show_col_types = FALSE))
+        }
       }
+      return(NULL)
+    }
+    
+    customer_data <- reactiveVal(NULL)
+    transactions_data <- reactiveVal(NULL)
+    
+    observe({
+      customer_df <- read_csv_safe(c(
+        "customer_data.csv",
+        "data/customer_data.csv",
+        "/mnt/data/customer_data.csv"
+      ))
       
-      # high uniqueness numeric columns are likely IDs
-      if (is.numeric(x) || is.integer(x)) {
-        non_missing_n <- sum(!is.na(x))
-        if (non_missing_n == 0) return(FALSE)
+      transactions_df <- read_csv_safe(c(
+        "transactions_data.csv",
+        "data/transactions_data.csv",
+        "/mnt/data/transactions_data.csv"
+      ))
+      
+      if (!is.null(customer_df)) {
+        date_cols <- c(
+          "first_tx", "last_tx", "last_survey_date",
+          "last_transaction_date", "first_transaction_date"
+        )
+        for (col in date_cols) {
+          if (col %in% names(customer_df)) {
+            customer_df[[col]] <- as.Date(customer_df[[col]])
+          }
+        }
         
-        unique_ratio <- dplyr::n_distinct(x, na.rm = TRUE) / non_missing_n
-        if (unique_ratio > 0.9) return(TRUE)
+        logical_like_cols <- c(
+          "savings_account", "credit_card", "personal_loan",
+          "investment_account", "insurance_product",
+          "bill_payment_user", "auto_savings_enabled"
+        )
+        for (col in logical_like_cols) {
+          if (col %in% names(customer_df)) {
+            customer_df[[col]] <- factor(
+              customer_df[[col]],
+              levels = c(FALSE, TRUE),
+              labels = c("No", "Yes")
+            )
+          }
+        }
+        
+        customer_data(customer_df)
       }
       
-      FALSE
-    }
-    
-    detect_var_type <- function(x, var_name = NULL) {
-      if (inherits(x, "Date")) return("date")
-      if (is.factor(x) || is.character(x) || is.logical(x)) return("categorical")
-      if (is.numeric(x) || is.integer(x)) return("numeric")
-      return("other")
-    }
-    
+      if (!is.null(transactions_df)) {
+        if ("date" %in% names(transactions_df)) {
+          transactions_df$date <- as.Date(transactions_df$date)
+        }
+        transactions_data(transactions_df)
+      }
+    })
     
     current_data <- reactive({
-      req(data())
-      data()
+      if (input$dataset_choice == "customer") {
+        req(customer_data())
+        customer_data()
+      } else {
+        req(transactions_data())
+        transactions_data()
+      }
     })
     
     numeric_cols <- reactive({
       req(current_data())
-      
-      df <- current_data()
-      
-      names(df)[sapply(names(df), function(nm) {
-        !is_identifier(df[[nm]], nm) && detect_var_type(df[[nm]], nm) == "numeric"
-      })]
+      names(current_data())[sapply(current_data(), is.numeric)]
     })
     
     output$variable_ui <- renderUI({
       df <- current_data()
       
-      non_id_names <- names(df)[
-        !mapply(is_identifier, df, names(df))
-      ]
-      
-      if (length(non_id_names) == 0) {
-        return(
-          helpText("No suitable analysis variables available after excluding identifier columns.")
-        )
-      }
-      
-      numeric_vars <- non_id_names[sapply(non_id_names, function(nm) {
-        detect_var_type(df[[nm]], nm) == "numeric"
-      })]
-      
-      categorical_vars <- non_id_names[sapply(non_id_names, function(nm) {
-        detect_var_type(df[[nm]], nm) == "categorical"
-      })]
-      
-      date_vars <- non_id_names[sapply(non_id_names, function(nm) {
-        detect_var_type(df[[nm]], nm) == "date"
-      })]
-      
-      grouped_choices <- list()
-      
-      if (length(numeric_vars) > 0) {
-        grouped_choices[["Numeric Variables"]] <- setNames(numeric_vars, pretty_label(numeric_vars))
-      }
-      
-      if (length(categorical_vars) > 0) {
-        grouped_choices[["Categorical Variables"]] <- setNames(categorical_vars, pretty_label(categorical_vars))
-      }
-      
-      if (length(date_vars) > 0) {
-        grouped_choices[["Date Variables"]] <- setNames(date_vars, pretty_label(date_vars))
-      }
-      
-      first_choice <- c(numeric_vars, categorical_vars, date_vars)[1]
-      
       selectInput(
         inputId = session$ns("selected_var"),
         label = strong("Variables"),
-        choices = grouped_choices,
-        selected = first_choice
+        choices = setNames(names(df), pretty_label(names(df))),
+        selected = names(df)[1]
       )
     })
     
@@ -264,11 +235,9 @@ eda_server <- function(id, data = NULL) {
       req(input$selected_var)
       
       df <- current_data()
-      req(input$selected_var %in% names(df))
-      
       var_name <- input$selected_var
       x <- df[[var_name]]
-      var_type <- detect_var_type(x, var_name)
+      var_type <- detect_var_type(x)
       label <- pretty_label(var_name)
       use_log <- isTRUE(input$use_log_scale)
       
@@ -283,7 +252,7 @@ eda_server <- function(id, data = NULL) {
           p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = .data[[var_name]])) +
             ggplot2::geom_histogram(
               bins = 30,
-              fill = teal_col,
+              fill = "#5DADE2",
               color = "white",
               alpha = 0.9
             ) +
@@ -302,7 +271,7 @@ eda_server <- function(id, data = NULL) {
           p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = .data[[var_name]])) +
             ggplot2::geom_histogram(
               bins = 30,
-              fill = teal_col,
+              fill = "#5DADE2",
               color = "white",
               alpha = 0.9
             ) +
@@ -370,15 +339,9 @@ eda_server <- function(id, data = NULL) {
         
         plotly::ggplotly(p)
         
-      } else if (var_type == "identifier") {
+      } else {
         p <- ggplot2::ggplot() +
-          ggplot2::annotate(
-            "text",
-            x = 1,
-            y = 1,
-            label = "This variable looks like an identifier, so a distribution plot is not meaningful.",
-            size = 5
-          ) +
+          ggplot2::annotate("text", x = 1, y = 1, label = "Unsupported variable type", size = 6) +
           ggplot2::theme_void()
         
         plotly::ggplotly(p)
@@ -391,16 +354,9 @@ eda_server <- function(id, data = NULL) {
       df <- current_data()
       var_name <- input$selected_var
       x <- df[[var_name]]
-      var_type <- detect_var_type(x, var_name)
+      var_type <- detect_var_type(x)
       label <- pretty_label(var_name)
       use_log <- isTRUE(input$use_log_scale)
-      
-      if (var_type == "identifier") {
-        return(HTML(paste0(
-          "<b>", label, "</b> appears to be an identifier field. ",
-          "Identifier variables usually have many unique values, so univariate distribution plots are not very meaningful."
-        )))
-      }
       
       if (var_type == "numeric") {
         miss <- sum(is.na(x))
@@ -467,7 +423,7 @@ eda_server <- function(id, data = NULL) {
     })
     
     output$scatter_x_ui <- renderUI({
-      req(length(numeric_cols()) >= 1)
+      req(numeric_cols())
       
       selectInput(
         inputId = session$ns("x_var"),
@@ -478,6 +434,7 @@ eda_server <- function(id, data = NULL) {
     })
     
     output$scatter_y_ui <- renderUI({
+      req(numeric_cols())
       req(length(numeric_cols()) >= 2)
       
       selectInput(
