@@ -82,7 +82,7 @@ model_ui <- function(id) {
       bs4Card(
         title = "Feature Importance",
         width = 4,
-        status = "primary",
+        status = "teal",
         solidHeader = FALSE,
         plotOutput(ns("feature_plot_bottom"), height = "300px")
       ),
