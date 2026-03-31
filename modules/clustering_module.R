@@ -222,8 +222,7 @@ clustering_server <- function(id, data) {
     # numeric columns from uploaded CSV
     numeric_cols <- reactive({
       req(data())
-      df <- data()
-      names(df)[sapply(df, is.numeric)]
+      names(data())[sapply(data(), is.numeric)]
     })
     
     # feature selector UI
@@ -428,6 +427,7 @@ clustering_server <- function(id, data) {
     # clustering updates automatically when inputs change
     cluster_result <- reactive({
       req(scaled_features())
+      req(selected_features())
       
       validate(
         need(input$k < nrow(scaled_features()), "k must be smaller than the number of rows used.")
@@ -457,8 +457,26 @@ clustering_server <- function(id, data) {
       
       list(
         km = km,
-        clustered_df = clustered_df
+        clustered_df = clustered_df,
+        cluster_order = cluster_order
       )
+    })
+    
+    # writeback function to active_data
+    observeEvent(cluster_result(), {
+      req(data())
+      req(selected_features())
+      req(cluster_result())
+      
+      df <- data()
+      
+      complete_idx <- complete.cases(df[, selected_features(), drop = FALSE])
+      
+      df$cluster <- NA
+      df$cluster[complete_idx] <- as.character(cluster_result()$clustered_df$cluster)
+      df$cluster <- as.factor(df$cluster)
+      
+      data(df)
     })
     
     # selected k value box
@@ -656,8 +674,9 @@ clustering_server <- function(id, data) {
         paste0("cluster_groupings_", Sys.Date(), ".csv")
       },
       content = function(file) {
-        req(cluster_result())
-        write.csv(cluster_result()$clustered_df, file, row.names = FALSE)
+        req(data())
+        req("cluster" %in% names(data()))
+        write.csv(data(), file, row.names = FALSE)
       }
     )
     
