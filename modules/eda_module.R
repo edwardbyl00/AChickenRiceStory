@@ -1,8 +1,6 @@
 eda_ui <- function(id) {
   ns <- NS(id)
-  
-  # Setup teal
-  teal_col <- "#20B2AA"
+
   
   tagList(
     tags$style(HTML("
@@ -99,15 +97,35 @@ eda_ui <- function(id) {
 eda_server <- function(id, data = NULL) {
   moduleServer(id, function(input, output, session) {
     
+    teal_col <- "#20B2AA"
+    
     pretty_label <- function(x) {
       x <- gsub("_", " ", x)
       tools::toTitleCase(x)
     }
     
-    detect_var_type <- function(x) {
+    detect_var_type <- function(x, var_name = NULL) {
       if (inherits(x, "Date")) return("date")
-      if (is.numeric(x) || is.integer(x)) return("numeric")
+      
+      if (!is.null(var_name)) {
+        id_pattern <- "(^id$|_id$|id_|customer_id|account_id|transaction_id|member_id|user_id)"
+        if (grepl(id_pattern, tolower(var_name))) {
+          return("identifier")
+        }
+      }
+      
       if (is.factor(x) || is.character(x) || is.logical(x)) return("categorical")
+      
+      if (is.numeric(x) || is.integer(x)) {
+        unique_ratio <- dplyr::n_distinct(x, na.rm = TRUE) / sum(!is.na(x))
+        
+        if (unique_ratio > 0.9) {
+          return("identifier")
+        }
+        
+        return("numeric")
+      }
+      
       return("other")
     }
     
@@ -122,6 +140,35 @@ eda_server <- function(id, data = NULL) {
       max(x, na.rm = TRUE) > med + 3 * iqr_val
     }
     
+#     Helper to detect ID columns
+    is_identifier <- function(x, name) {
+      name <- tolower(name)
+      
+      # name-based rule
+      if (grepl("(^id$|_id$|id_|customer_id|account_id|transaction_id|member_id|user_id)", name)) {
+        return(TRUE)
+      }
+      
+      # high uniqueness numeric columns are likely IDs
+      if (is.numeric(x) || is.integer(x)) {
+        non_missing_n <- sum(!is.na(x))
+        if (non_missing_n == 0) return(FALSE)
+        
+        unique_ratio <- dplyr::n_distinct(x, na.rm = TRUE) / non_missing_n
+        if (unique_ratio > 0.9) return(TRUE)
+      }
+      
+      FALSE
+    }
+    
+    detect_var_type <- function(x, var_name = NULL) {
+      if (inherits(x, "Date")) return("date")
+      if (is.factor(x) || is.character(x) || is.logical(x)) return("categorical")
+      if (is.numeric(x) || is.integer(x)) return("numeric")
+      return("other")
+    }
+    
+    
     current_data <- reactive({
       req(data())
       data()
@@ -129,17 +176,60 @@ eda_server <- function(id, data = NULL) {
     
     numeric_cols <- reactive({
       req(current_data())
-      names(current_data())[sapply(current_data(), is.numeric)]
+      
+      df <- current_data()
+      
+      names(df)[sapply(names(df), function(nm) {
+        !is_identifier(df[[nm]], nm) && detect_var_type(df[[nm]], nm) == "numeric"
+      })]
     })
     
     output$variable_ui <- renderUI({
       df <- current_data()
       
+      non_id_names <- names(df)[
+        !mapply(is_identifier, df, names(df))
+      ]
+      
+      if (length(non_id_names) == 0) {
+        return(
+          helpText("No suitable analysis variables available after excluding identifier columns.")
+        )
+      }
+      
+      numeric_vars <- non_id_names[sapply(non_id_names, function(nm) {
+        detect_var_type(df[[nm]], nm) == "numeric"
+      })]
+      
+      categorical_vars <- non_id_names[sapply(non_id_names, function(nm) {
+        detect_var_type(df[[nm]], nm) == "categorical"
+      })]
+      
+      date_vars <- non_id_names[sapply(non_id_names, function(nm) {
+        detect_var_type(df[[nm]], nm) == "date"
+      })]
+      
+      grouped_choices <- list()
+      
+      if (length(numeric_vars) > 0) {
+        grouped_choices[["Numeric Variables"]] <- setNames(numeric_vars, pretty_label(numeric_vars))
+      }
+      
+      if (length(categorical_vars) > 0) {
+        grouped_choices[["Categorical Variables"]] <- setNames(categorical_vars, pretty_label(categorical_vars))
+      }
+      
+      if (length(date_vars) > 0) {
+        grouped_choices[["Date Variables"]] <- setNames(date_vars, pretty_label(date_vars))
+      }
+      
+      first_choice <- c(numeric_vars, categorical_vars, date_vars)[1]
+      
       selectInput(
         inputId = session$ns("selected_var"),
         label = strong("Variables"),
-        choices = setNames(names(df), pretty_label(names(df))),
-        selected = names(df)[1]
+        choices = grouped_choices,
+        selected = first_choice
       )
     })
     
@@ -161,9 +251,11 @@ eda_server <- function(id, data = NULL) {
       req(input$selected_var)
       
       df <- current_data()
+      req(input$selected_var %in% names(df))
+      
       var_name <- input$selected_var
       x <- df[[var_name]]
-      var_type <- detect_var_type(x)
+      var_type <- detect_var_type(x, var_name)
       label <- pretty_label(var_name)
       use_log <- isTRUE(input$use_log_scale)
       
@@ -265,9 +357,15 @@ eda_server <- function(id, data = NULL) {
         
         plotly::ggplotly(p)
         
-      } else {
+      } else if (var_type == "identifier") {
         p <- ggplot2::ggplot() +
-          ggplot2::annotate("text", x = 1, y = 1, label = "Unsupported variable type", size = 6) +
+          ggplot2::annotate(
+            "text",
+            x = 1,
+            y = 1,
+            label = "This variable looks like an identifier, so a distribution plot is not meaningful.",
+            size = 5
+          ) +
           ggplot2::theme_void()
         
         plotly::ggplotly(p)
@@ -280,9 +378,16 @@ eda_server <- function(id, data = NULL) {
       df <- current_data()
       var_name <- input$selected_var
       x <- df[[var_name]]
-      var_type <- detect_var_type(x)
+      var_type <- detect_var_type(x, var_name)
       label <- pretty_label(var_name)
       use_log <- isTRUE(input$use_log_scale)
+      
+      if (var_type == "identifier") {
+        return(HTML(paste0(
+          "<b>", label, "</b> appears to be an identifier field. ",
+          "Identifier variables usually have many unique values, so univariate distribution plots are not very meaningful."
+        )))
+      }
       
       if (var_type == "numeric") {
         miss <- sum(is.na(x))
@@ -349,7 +454,8 @@ eda_server <- function(id, data = NULL) {
     })
     
     output$scatter_x_ui <- renderUI({
-      req(numeric_cols())
+      req(length(numeric_cols()) >= 1)
+      
       selectInput(
         inputId = session$ns("x_var"),
         label = strong("X Variable"),
@@ -359,7 +465,6 @@ eda_server <- function(id, data = NULL) {
     })
     
     output$scatter_y_ui <- renderUI({
-      req(numeric_cols())
       req(length(numeric_cols()) >= 2)
       
       selectInput(
