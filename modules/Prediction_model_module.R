@@ -15,6 +15,22 @@ model_ui <- function(id) {
           status = "teal",
           solidHeader = FALSE,
           
+          tags$div(
+            style = "
+      background-color: #fff3cd;
+      color: #856404;
+      padding: 10px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      font-size: 13px;
+    ",
+            icon("exclamation-triangle"),
+            " Computation time depends on dataset size and model complexity."
+          ),
+          
+          uiOutput(ns("runtime_warning")),
+          
+          
           selectInput(
             inputId = ns("model_type"),
             label = "Select Model",
@@ -23,6 +39,7 @@ model_ui <- function(id) {
           
           uiOutput(ns("target_ui")),
           uiOutput(ns("predictors_ui")),
+          uiOutput(ns("cluster_filter_ui")),
           
           conditionalPanel(
             condition = sprintf("input['%s'] == 'Regression Tree'", ns("model_type")),
@@ -85,6 +102,18 @@ model_ui <- function(id) {
     ),
     fluidRow(
       column(
+        width = 12,
+        bs4Card(
+          title = "Cluster Summary",
+          width = 12,
+          status = "teal",
+          solidHeader = FALSE,
+          DTOutput(ns("cluster_summary_table"))
+        )
+      )
+    ),
+    fluidRow(
+      column(
         width = 4,
         bs4Card(
           title = "Feature Importance",
@@ -129,6 +158,21 @@ model_server <- function(id, data, saved_models) {
       cols[!grepl("(^id$|_id$)", cols, ignore.case = TRUE)]
     })
     
+    output$cluster_filter_ui <- renderUI({
+      req(data())
+      
+      validate(
+        need("cluster" %in% names(data()), "No cluster labels available. Run clustering first.")
+      )
+      
+      selectInput(
+        inputId = session$ns("cluster_filter"),
+        label = "Select Cluster",
+        choices = c("All Clusters", sort(unique(data()$cluster))),
+        selected = "All Clusters"
+      )
+    })
+    
     output$target_ui <- renderUI({
       req(data())
       req(length(numeric_cols()) >= 2)
@@ -138,6 +182,25 @@ model_server <- function(id, data, saved_models) {
         label = "Select Target Variable",
         choices = numeric_cols(),
         selected = numeric_cols()[1]
+      )
+    })
+    
+    output$runtime_warning <- renderUI({
+      req(runtime_estimate())
+      
+      est <- runtime_estimate()
+      
+      tags$div(
+        style = paste0(
+          "background-color:", est$color, ";",
+          "color:", est$text_color, ";",
+          "padding:10px;",
+          "border-radius:8px;",
+          "margin-bottom:12px;",
+          "font-size:13px;"
+        ),
+        icon("clock"),
+        paste(" ", est$text)
       )
     })
     
@@ -167,9 +230,56 @@ model_server <- function(id, data, saved_models) {
       req(input$target, input$predictors)
       req(length(input$predictors) >= 1)
       
-      selected_cols <- unique(c(input$target, input$predictors))
+      selected_cols <- unique(c(input$target, input$predictors, "cluster"))
       df <- data()[, selected_cols, drop = FALSE]
+      
+      if ("cluster" %in% names(df) && !is.null(input$cluster_filter) && input$cluster_filter != "All Clusters") {
+        df <- df[df$cluster == as.numeric(input$cluster_filter), , drop = FALSE]
+      }
+      
       na.omit(df)
+    })
+    
+    runtime_estimate <- reactive({
+      req(data(), input$model_type)
+      
+      n_rows <- nrow(model_data())
+      n_pred <- length(input$predictors)
+      
+      score <- 0
+      
+      if (input$model_type == "Linear Regression") {
+        score <- n_rows * max(n_pred, 1)
+        
+      } else if (input$model_type == "Regression Tree") {
+        score <- n_rows * max(n_pred, 1) * max(input$tree_maxdepth, 1)
+        
+      } else if (input$model_type == "Random Forest") {
+        score <- n_rows * max(n_pred, 1) * max(input$n_trees, 1)
+        
+      } else if (input$model_type == "XGBoost") {
+        score <- n_rows * max(n_pred, 1) * max(input$xgb_trees, 1) * max(input$xgb_depth, 1)
+      }
+      
+      if (score < 5e4) {
+        list(
+          text = "Estimated runtime: under 10 seconds.",
+          color = "#d4edda",
+          text_color = "#155724"
+        )
+      } else if (score < 5e6) {
+        list(
+          text = "Estimated runtime: around 10 to 60 seconds.",
+          color = "#fff3cd",
+          text_color = "#856404"
+        )
+      } else {
+        list(
+          text = "Estimated runtime: may exceed 1 minute.",
+          color = "#f8d7da",
+          text_color = "#721c24"
+        )
+      }
     })
     
     fitted_model <- eventReactive(input$run_model, {
@@ -343,6 +453,8 @@ model_server <- function(id, data, saved_models) {
       )
     })
     
+    
+    
     output$r2_box <- renderbs4ValueBox({
       req(fitted_model())
       bs4ValueBox(
@@ -423,6 +535,20 @@ model_server <- function(id, data, saved_models) {
       )
       
       abline(0, 1, col = "red", lty = 2)
+    })
+    
+    output$cluster_summary_table <- renderDT({
+      req(fitted_model())
+      
+      df <- data.frame(
+        Cluster = if (is.null(input$cluster_filter) || input$cluster_filter == "All Clusters") "All Clusters" else input$cluster_filter,
+        Records = length(fitted_model()$actual),
+        Mean_Actual = round(mean(fitted_model()$actual), 2),
+        Mean_Predicted = round(mean(fitted_model()$predictions), 2),
+        RMSE = round(sqrt(mean((fitted_model()$actual - fitted_model()$predictions)^2)), 2)
+      )
+      
+      datatable(df, rownames = FALSE, options = list(dom = "t"))
     })
     
     output$model_summary <- renderPrint({
