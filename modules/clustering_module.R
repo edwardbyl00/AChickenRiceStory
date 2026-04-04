@@ -45,7 +45,7 @@ clustering_ui <- function(id) {
       tabPanel(
         "Cluster Selection",
         
-        # row 1 controls + number of customers
+
         fluidRow(
           column(
             width = 6,
@@ -88,7 +88,7 @@ clustering_ui <- function(id) {
           )
         ),
         
-        # row 2 elbow + silhouette
+
         fluidRow(
           column(
             width = 6,
@@ -118,7 +118,7 @@ clustering_ui <- function(id) {
       tabPanel(
         "Cluster Analysis",
         
-        # row 1 summary so user remembers setup
+
         fluidRow(
           column(
             width = 3,
@@ -159,7 +159,7 @@ clustering_ui <- function(id) {
           )
         ),
         
-        # row 2 cluster heatmap
+
         fluidRow(
           bs4Card(
             title = "Cluster Feature Heatmap",
@@ -181,8 +181,7 @@ clustering_ui <- function(id) {
             plotOutput(ns("cluster_size_plot_analysis"), height = "300px")
           )
         ),
-        
-        # row 3 parallel + pca
+
         fluidRow(
           column(
             width = 6,
@@ -216,7 +215,7 @@ clustering_ui <- function(id) {
 clustering_server <- function(id, data) {
   moduleServer(id, function(input, output, session) {
     
-    # store the confirmed feature set after user clicks Update Features
+    # store the confirmed feature set
     selected_features <- reactiveVal(NULL)
     
     # numeric columns from uploaded CSV
@@ -239,7 +238,7 @@ clustering_server <- function(id, data) {
       )
     })
     
-    # set a default feature set once data is available
+    # set a default feature set
     observe({
       req(data())
       req(length(numeric_cols()) >= 2)
@@ -249,7 +248,7 @@ clustering_server <- function(id, data) {
       }
     })
     
-    # update confirmed features only when button is clicked
+    # update confirmed features after button clicked
     observeEvent(input$update_features, {
       req(input$feature_vars)
       validate(
@@ -279,7 +278,7 @@ clustering_server <- function(id, data) {
       scale(feature_data())
     })
     
-    # correlation matrix plot
+    # correlation matrix
     output$corr_plot <- renderPlot({
       req(feature_data())
       
@@ -309,7 +308,7 @@ clustering_server <- function(id, data) {
         )
     }, height = 500)
     
-    # elbow data over fixed range
+    # elbow data
     elbow_data <- reactive({
       req(scaled_features())
       
@@ -356,7 +355,7 @@ clustering_server <- function(id, data) {
         theme_minimal()
     }, height = 300)
     
-    # silhouette data over fixed range
+    # silhouette data
     silhouette_data <- reactive({
       req(scaled_features())
       
@@ -441,7 +440,7 @@ clustering_server <- function(id, data) {
         algorithm = "Lloyd"
       )
       
-      # reorder cluster labels by cluster size, largest cluster becomes 1
+      # reorder cluster labels by cluster size desc
       cluster_raw <- factor(km$cluster)
       
       cluster_order <- data.frame(cluster = cluster_raw) %>%
@@ -462,7 +461,7 @@ clustering_server <- function(id, data) {
       )
     })
     
-    # writeback function to active_data
+    # writeback on active_data
     observeEvent(cluster_result(), {
       req(data())
       req(selected_features())

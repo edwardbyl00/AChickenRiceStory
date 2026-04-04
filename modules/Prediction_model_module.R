@@ -126,18 +126,17 @@ model_ui <- function(id) {
   )
 }
 
+### Model server
 model_server <- function(id, data, saved_models) {
   moduleServer(id, function(input, output, session) {
     
     # numeric columns from uploaded CSV
-    # target should remain numeric because this is a regression task
     numeric_cols <- reactive({
       req(data())
       names(data())[sapply(data(), is.numeric)]
     })
     
-    # predictor columns can include numeric, factor, and character
-    # this allows the cluster column to be used once it is written back by the clustering module
+    # predictor columns to include numeric, factor, and character
     predictor_cols <- reactive({
       req(data())
       names(data())[sapply(data(), function(x) {
@@ -145,7 +144,7 @@ model_server <- function(id, data, saved_models) {
       })]
     })
     
-    # show a note when cluster column is available for modelling
+    # indicator note when cluster column is used as predictor
     output$cluster_note_ui <- renderUI({
       req(data())
       
@@ -202,7 +201,7 @@ model_server <- function(id, data, saved_models) {
       
       available_predictors <- setdiff(predictor_cols(), input$target)
       
-      # preserve existing selection if user already picked
+      # preserve existing selection
       selected_vars <- isolate(input$predictors)
       
       if (cleared_flag()) {
@@ -264,8 +263,7 @@ model_server <- function(id, data, saved_models) {
       selected_cols <- unique(c(input$target, input$predictors))
       df <- data()[, selected_cols, drop = FALSE]
       
-      # convert character predictors to factor
-      # this helps lm, rpart and randomForest handle categorical predictors properly
+      # convert character predictors to factor >>to handle cat predictors
       for (col in names(df)) {
         if (col != input$target && is.character(df[[col]])) {
           df[[col]] <- as.factor(df[[col]])
@@ -383,7 +381,6 @@ model_server <- function(id, data, saved_models) {
         x_df <- df[, predictors, drop = FALSE]
         
         # one hot encode non numeric predictors
-        # this is required because xgboost needs numeric matrix input
         x_mat <- model.matrix(~ . - 1, data = x_df)
         y_vec <- df[[input$target]]
         
@@ -534,8 +531,7 @@ model_server <- function(id, data, saved_models) {
       )
     })
     
-    # download coefficients for linear regression
-    # for tree based models, export feature importance instead
+    # download coefficients or feature importance
     output$download_coefficients <- downloadHandler(
       filename = function() {
         paste0("model_coefficients_", Sys.Date(), ".csv")
@@ -545,7 +541,7 @@ model_server <- function(id, data, saved_models) {
         
         model_obj <- fitted_model()$model
         
-        # linear regression has actual coefficients
+        # actual coefficients for linear
         if ("lm" %in% class(model_obj)) {
           coef_vals <- coef(model_obj)
           
@@ -557,8 +553,7 @@ model_server <- function(id, data, saved_models) {
           write.csv(coef_df, file, row.names = FALSE)
           
         } else {
-          # non linear models do not have standard coefficients
-          # export feature importance instead
+          # export feature importance instead if not linear models
           imp_df <- fitted_model()$importance_df
           
           validate(
@@ -588,7 +583,7 @@ model_server <- function(id, data, saved_models) {
       abline(0, 1, col = "red", lty = 2)
     })
     
-    # model summary text
+    # model summary
     output$model_summary <- renderPrint({
       req(fitted_model())
       cat(paste(fitted_model()$model_summary_text, collapse = "\n"))
